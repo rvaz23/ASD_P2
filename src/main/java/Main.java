@@ -1,7 +1,7 @@
 import pt.unl.fct.di.novasys.babel.core.Babel;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import protocols.agreement.IncorrectAgreement;
+import protocols.agreement.Agreement;
 import protocols.app.HashApp;
 import protocols.statemachine.StateMachine;
 
@@ -45,7 +45,7 @@ public class Main {
         // StateMachine Protocol
         StateMachine sm = new StateMachine(props);
         // Agreement Protocol
-        IncorrectAgreement agreement = new IncorrectAgreement(props);
+        Agreement agreement = new Agreement(props);
 
         //Register applications in babel
         babel.registerProtocol(hashApp);

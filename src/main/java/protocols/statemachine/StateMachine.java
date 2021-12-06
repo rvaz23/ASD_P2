@@ -9,7 +9,7 @@ import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import protocols.agreement.IncorrectAgreement;
+import protocols.agreement.Agreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.requests.ProposeRequest;
@@ -127,7 +127,7 @@ public class StateMachine extends GenericProtocol {
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
-                    IncorrectAgreement.PROTOCOL_ID);
+                    Agreement.PROTOCOL_ID);
         }
     }
 

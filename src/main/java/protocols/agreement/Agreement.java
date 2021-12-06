@@ -1,12 +1,15 @@
 package protocols.agreement;
 
 import protocols.agreement.messages.BroadcastMessage;
+import protocols.agreement.messages.PrepareMessage;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
+import protocols.agreement.timers.Timeout;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
+import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,13 +23,13 @@ import java.util.*;
 /**
  * This is NOT a correct agreement protocol (it is actually a VERY wrong one)
  * This is simply an example of things you can do, and can be used as a starting point.
- *
+ * <p>
  * You are free to change/delete ANYTHING in this class, including its fields.
  * Do not assume that any logic implemented here is correct, think for yourself!
  */
-public class IncorrectAgreement extends GenericProtocol {
+public class Agreement extends GenericProtocol {
 
-    private static final Logger logger = LogManager.getLogger(IncorrectAgreement.class);
+    private static final Logger logger = LogManager.getLogger(Agreement.class);
 
     //Protocol information, to register in babel
     public final static short PROTOCOL_ID = 100;
@@ -36,12 +39,17 @@ public class IncorrectAgreement extends GenericProtocol {
     private int joinedInstance;
     private List<Host> membership;
 
-    public IncorrectAgreement(Properties props) throws IOException, HandlerRegistrationException {
+    private HashMap<Integer, PaxosInstance> paxosInstancesMap;
+    //no timeout for instances with no initial value to propose
+    private HashMap<Integer, Timeout> timeoutInstancesMap;
+
+    public Agreement(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         joinedInstance = -1; //-1 means we have not yet joined the system
         membership = null;
 
         /*--------------------- Register Timer Handlers ----------------------------- */
+        registerTimerHandler(Timeout.TIMEOUT_ID, this::uponTimeout);
 
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(ProposeRequest.REQUEST_ID, this::uponProposeRequest);
@@ -69,7 +77,7 @@ public class IncorrectAgreement extends GenericProtocol {
         registerMessageSerializer(cId, BroadcastMessage.MSG_ID, BroadcastMessage.serializer);
         /*---------------------- Register Message Handlers -------------------------- */
         try {
-              registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
+            registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
         } catch (HandlerRegistrationException e) {
             throw new AssertionError("Error registering message handler.", e);
         }
@@ -77,7 +85,7 @@ public class IncorrectAgreement extends GenericProtocol {
     }
 
     private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
-        if(joinedInstance >= 0 ){
+        if (joinedInstance >= 0) {
             //Obviously your agreement protocols will not decide things as soon as you receive the first message
             triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
         } else {
@@ -95,16 +103,36 @@ public class IncorrectAgreement extends GenericProtocol {
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
+        int instanceID = request.getInstance();
+        PaxosInstance instance = paxosInstancesMap.get(instanceID);
+        if (instance == null) {
+            //create instance in map
+            int seq_number;
+            if (membership.isEmpty()) seq_number = 1;
+            else seq_number = membership.size();
+            PaxosInstance paxosInstance = new PaxosInstance(request.getOperation(), seq_number, request.getOpId());
+            paxosInstancesMap.put(seq_number, paxosInstance);
+        } else {
+            //broadcast prepare for all replicas
+            PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
+            for (Host host : membership) {
+                sendMessage(prepareMessage, host);
+            }
+        }
+
+
         BroadcastMessage msg = new BroadcastMessage(request.getInstance(), request.getOpId(), request.getOperation());
         logger.debug("Sending to: " + membership);
         membership.forEach(h -> sendMessage(msg, h));
     }
+
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);
         //The AddReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
         //You should probably take it into account while doing whatever you do here.
         membership.add(request.getReplica());
     }
+
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);
         //The RemoveReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
@@ -115,6 +143,10 @@ public class IncorrectAgreement extends GenericProtocol {
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
         //If a message fails to be sent, for whatever reason, log the message and the reason
         logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
+    }
+
+    private void uponTimeout(Timeout timer, long timerID) {
+
     }
 
 }
