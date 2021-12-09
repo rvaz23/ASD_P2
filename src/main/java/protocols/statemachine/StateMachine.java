@@ -1,6 +1,8 @@
 package protocols.statemachine;
 
 import protocols.agreement.notifications.JoinedNotification;
+import protocols.app.utils.Operation;
+
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -19,9 +21,7 @@ import protocols.statemachine.requests.OrderRequest;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * This is NOT fully functional StateMachine implementation.
@@ -48,12 +48,18 @@ public class StateMachine extends GenericProtocol {
 
     private State state;
     private List<Host> membership;
+    private Map<Integer, Operation> decided;
+
+
+    private List<Operation> pending;
     private int nextInstance;
 
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
 
+        decided= new HashMap<Integer,Operation>();
+        pending=new ArrayList<Operation>();
         String address = props.getProperty("address");
         String port = props.getProperty("p2p_port");
 
@@ -120,14 +126,19 @@ public class StateMachine extends GenericProtocol {
     /*--------------------------------- Requests ---------------------------------------- */
     private void uponOrderRequest(OrderRequest request, short sourceProto) {
         logger.debug("Received request: " + request);
+        Operation op = new Operation((byte)1,request.getOpId().toString(),request.getOperation());
         if (state == State.JOINING) {
             //Do something smart (like buffering the requests)
+            pending.add(op);
         } else if (state == State.ACTIVE) {
             //Also do something starter, we don't want an infinite number of instances active
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
-            sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
-                    Agreement.PROTOCOL_ID);
+            //TODO if nextInstance - lastdecided > 5 aguardar
+            pending.add(op);
+            if (!decided.containsKey(nextInstance)){
+                sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),Agreement.PROTOCOL_ID);
+            }
         }
     }
 
@@ -137,6 +148,9 @@ public class StateMachine extends GenericProtocol {
         //Maybe we should make sure operations are executed in order?
         //You should be careful and check if this operation if an application operation (and send it up)
         //or if this is an operations that was executed by the state machine itself (in which case you should execute)
+        if (notification.getInstance()>=nextInstance)
+            nextInstance=notification.getInstance()+1;
+        //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
         triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
     }
 
@@ -149,6 +163,15 @@ public class StateMachine extends GenericProtocol {
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Connection to {} is up", event.getNode());
+        //TODO DO WE NEED THIS IN PAXOS
+        /*
+        Host node = event.getNode();
+        if(!membership.contains(node)){
+            membership.add(node);
+            byte[] op = "ADD"
+            Operation addNodeOp = new Operation()
+            pending.add()
+        }*/
     }
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
