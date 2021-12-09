@@ -1,23 +1,22 @@
 package protocols.agreement.messages;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.codec.binary.Hex;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
 
-import java.util.UUID;
+public class AcceptMessage extends ProtoMessage {
 
-public class PrepareMessage extends ProtoMessage {
-
-    public static final short MSG_ID = 102;
+    public static final short MSG_ID = 104;
 
     private int instance;
     private int proposer_seq;
+    private byte[] value;
 
-    public PrepareMessage(int instance, int proposer_seq) {
+    public AcceptMessage(int instance, int proposer_seq, byte[] value) {
         super(MSG_ID);
         this.instance = instance;
         this.proposer_seq = proposer_seq;
+        this.value = value;
     }
 
     @Override
@@ -25,34 +24,41 @@ public class PrepareMessage extends ProtoMessage {
         return super.getId();
     }
 
-    public int getInstance() {
-        return instance;
+    @Override
+    public String toString() {
+        return "PrepareMessage{" +
+                "instance=" + instance +
+                ", proposer_seq=" + proposer_seq +
+                ", value=" + value +
+                '}';
     }
 
     public int getProposer_seq() {
         return proposer_seq;
     }
 
-    @Override
-    public String toString() {
-        return "PrepareMessage{" +
-                "instance=" + instance +
-                ", proposer_seq=" + proposer_seq +
-                '}';
+    public int getInstance() {
+        return instance;
     }
 
-    public static ISerializer<PrepareMessage> serializer = new ISerializer<PrepareMessage>() {
+    public byte[] getValue() {
+        return value;
+    }
+
+    public static ISerializer<AcceptMessage> serializer = new ISerializer<AcceptMessage>() {
         @Override
-        public void serialize(PrepareMessage msg, ByteBuf out) {
+        public void serialize(AcceptMessage msg, ByteBuf out) {
             out.writeInt(msg.instance);
             out.writeInt(msg.proposer_seq);
+            out.writeBytes(msg.value);
         }
 
         @Override
-        public PrepareMessage deserialize(ByteBuf in) {
+        public AcceptMessage deserialize(ByteBuf in) {
             int instance = in.readInt();
             int proposer_seq = in.readInt();
-            return new PrepareMessage(instance, proposer_seq);
+            byte[] value = in.array();
+            return new AcceptMessage(instance, proposer_seq, value);
         }
     };
 
