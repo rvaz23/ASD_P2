@@ -1,11 +1,13 @@
 package protocols.agreement;
 
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.network.data.Host;
 
 import java.util.UUID;
 
 public class PaxosInstance {
 
+    private final Operation operation;
     private byte[] proposer_value;
     private int proposer_seq;
     private int highest_prepare;
@@ -15,12 +17,11 @@ public class PaxosInstance {
     private int[] accept_ok_set;
     private boolean decided;
     private Host[] all_processes;
-    private UUID operation_id;
 
-    public PaxosInstance(byte[] proposer_value, int proposer_seq, UUID operation_id) {
+    public PaxosInstance(byte[] proposer_value, int proposer_seq, Operation operation) {
         this.proposer_value = proposer_value;
         this.proposer_seq = proposer_seq;
-        this.operation_id = operation_id;
+        this.operation = operation;
     }
 
     public byte[] getProposer_value() {

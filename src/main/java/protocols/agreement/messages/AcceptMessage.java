@@ -1,8 +1,11 @@
 package protocols.agreement.messages;
 
 import io.netty.buffer.ByteBuf;
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
+
+import java.nio.charset.StandardCharsets;
 
 public class AcceptMessage extends ProtoMessage {
 
@@ -10,9 +13,9 @@ public class AcceptMessage extends ProtoMessage {
 
     private int instance;
     private int proposer_seq;
-    private byte[] value;
+    private Operation value;
 
-    public AcceptMessage(int instance, int proposer_seq, byte[] value) {
+    public AcceptMessage(int instance, int proposer_seq, Operation value) {
         super(MSG_ID);
         this.instance = instance;
         this.proposer_seq = proposer_seq;
@@ -41,7 +44,7 @@ public class AcceptMessage extends ProtoMessage {
         return instance;
     }
 
-    public byte[] getValue() {
+    public Operation getValue() {
         return value;
     }
 
@@ -50,15 +53,29 @@ public class AcceptMessage extends ProtoMessage {
         public void serialize(AcceptMessage msg, ByteBuf out) {
             out.writeInt(msg.instance);
             out.writeInt(msg.proposer_seq);
-            out.writeBytes(msg.value);
+
+            out.writeInt(msg.value.getData().length);
+            out.writeBytes(msg.value.getData());
+
+            out.writeInt(msg.value.getKey().length());
+            out.writeBytes(msg.value.getKey().getBytes(StandardCharsets.UTF_8));
+
+            out.writeByte(msg.value.getOpType());
         }
 
         @Override
         public AcceptMessage deserialize(ByteBuf in) {
             int instance = in.readInt();
             int proposer_seq = in.readInt();
-            byte[] value = in.array();
-            return new AcceptMessage(instance, proposer_seq, value);
+
+            int data_size = in.readInt();
+            byte[] data = in.readBytes(data_size).array();
+
+            int opID_size = in.readInt();
+            String opID = in.readBytes(opID_size).toString();
+
+            byte opType = in.readByte();
+            return new AcceptMessage(instance, proposer_seq, new Operation(opType, opID, data));
         }
     };
 

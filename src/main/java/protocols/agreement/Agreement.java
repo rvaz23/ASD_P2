@@ -4,6 +4,7 @@ import protocols.agreement.messages.*;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.*;
 import protocols.agreement.timers.Timeout;
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -87,7 +88,7 @@ public class Agreement extends GenericProtocol {
     private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
         if (joinedInstance >= 0) {
             //Obviously your agreement protocols will not decide things as soon as you receive the first message
-            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
+            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOp()));
         } else {
             //We have not yet received a JoinedNotification, but we are already receiving messages from the other
             //agreement instances, maybe we should do something with them...?
@@ -111,7 +112,7 @@ public class Agreement extends GenericProtocol {
             for (selfID = 0; selfID < membership.size(); selfID++)
                 if (membership.get(selfID).equals(myself))
                     break;
-            instance = new PaxosInstance(request.getOperation(), selfID, request.getOpId());
+            instance = new PaxosInstance(request.getOperation().getData(), selfID, request.getOperation());
             paxosInstancesMap.put(instanceID, instance);
         }
 
@@ -121,7 +122,9 @@ public class Agreement extends GenericProtocol {
             sendMessage(prepareMessage, host);
         }
 
-        BroadcastMessage msg = new BroadcastMessage(request.getInstance(), request.getOpId(), request.getOperation());
+        BroadcastMessage msg = new BroadcastMessage(
+                request.getInstance(),
+                request.getOperation());
         logger.debug("Sending to: " + membership);
         membership.forEach(h -> sendMessage(msg, h));
     }
@@ -166,15 +169,18 @@ public class Agreement extends GenericProtocol {
             for (selfID = 0; selfID < membership.size(); selfID++)
                 if (membership.get(selfID).equals(myself))
                     break;
-            instance = new PaxosInstance(msg.getValue().getOperation(), selfID, msg.getValue().getOperationId());
-            paxosInstancesMap.put(msg.getInstance(), instance);
-            AcceptOkMessage message = new AcceptOkMessage(
-                    
-            );
-            sendMessage(message, host);
-        } else {
-
+            instance = new PaxosInstance(msg.getValue().getData(), selfID, msg.getValue());
+            //todo ??use UUID or String as ID??
         }
+        instance.setHighest_prepare(msg.getProposer_seq());
+        instance.setHighest_accepted(msg.getProposer_seq());
+        instance.setHighest_value(msg.getValue().getData());
+        paxosInstancesMap.put(msg.getInstance(), instance);
+        AcceptOkMessage message = new AcceptOkMessage(
+                msg.getInstance(),
+                msg.getProposer_seq(),
+                new Operation(msg.getValue().getOpType(), msg.getValue().getKey(), msg.getValue().getData()));
+        sendMessage(message, host);
     }
 
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {

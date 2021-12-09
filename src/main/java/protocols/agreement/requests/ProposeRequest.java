@@ -1,5 +1,6 @@
 package protocols.agreement.requests;
 
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import org.apache.commons.codec.binary.Hex;
 
@@ -10,10 +11,10 @@ public class ProposeRequest extends ProtoRequest {
     public static final short REQUEST_ID = 101;
 
     private final int instance;
-    private final UUID opId;
-    private final byte[] operation;
+    private final String opId;
+    private final Operation operation;
 
-    public ProposeRequest(int instance, UUID opId, byte[] operation) {
+    public ProposeRequest(int instance, String opId, Operation operation) {
         super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
@@ -24,11 +25,11 @@ public class ProposeRequest extends ProtoRequest {
         return instance;
     }
 
-    public byte[] getOperation() {
+    public Operation getOperation() {
         return operation;
     }
 
-    public UUID getOpId() {
+    public String getOpId() {
         return opId;
     }
 
@@ -37,7 +38,7 @@ public class ProposeRequest extends ProtoRequest {
         return "ProposeRequest{" +
                 "instance=" + instance +
                 ", opId=" + opId +
-                ", operation=" + Hex.encodeHexString(operation) +
+                ", operation=" + operation +
                 '}';
     }
 }

@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.apache.commons.codec.binary.Hex;
 
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoNotification;
 
 public class DecidedNotification extends ProtoNotification {
@@ -11,13 +12,11 @@ public class DecidedNotification extends ProtoNotification {
     public static final short NOTIFICATION_ID = 101;
 
     private final int instance;
-    private final UUID opId;
-    private final byte[] operation;
+    private final Operation operation;
 
-    public DecidedNotification(int instance, UUID opId, byte[] operation) {
+    public DecidedNotification(int instance, Operation operation) {
         super(NOTIFICATION_ID);
         this.instance = instance;
-        this.opId = opId;
         this.operation = operation;
     }
 
@@ -25,20 +24,15 @@ public class DecidedNotification extends ProtoNotification {
         return instance;
     }
 
-    public byte[] getOperation() {
+    public Operation getOperation() {
         return operation;
-    }
-
-    public UUID getOpId() {
-        return opId;
     }
 
     @Override
     public String toString() {
         return "DecidedNotification{" +
                 "instance=" + instance +
-                ", opId=" + opId +
-                ", operation=" + Hex.encodeHexString(operation) +
+                ", operation=" + operation +
                 '}';
     }
 }
