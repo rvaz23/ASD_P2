@@ -1,10 +1,8 @@
 package protocols.agreement;
 
-import protocols.agreement.messages.BroadcastMessage;
-import protocols.agreement.messages.PrepareMessage;
+import protocols.agreement.messages.*;
 import protocols.agreement.notifications.JoinedNotification;
-import protocols.agreement.requests.AddReplicaRequest;
-import protocols.agreement.requests.RemoveReplicaRequest;
+import protocols.agreement.requests.*;
 import protocols.agreement.timers.Timeout;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -15,7 +13,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
-import protocols.agreement.requests.ProposeRequest;
 
 import java.io.IOException;
 import java.util.*;
@@ -78,10 +75,13 @@ public class Agreement extends GenericProtocol {
         /*---------------------- Register Message Handlers -------------------------- */
         try {
             registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
+            registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage);
+            registerMessageHandler(cId, PrepareOkMessage.MSG_ID, this::uponPrepareOkMessage);
+            registerMessageHandler(cId, AcceptMessage.MSG_ID, this::uponAcceptMessage);
+            registerMessageHandler(cId, AcceptOkMessage.MSG_ID, this::uponAcceptOkMessage);
         } catch (HandlerRegistrationException e) {
             throw new AssertionError("Error registering message handler.", e);
         }
-
     }
 
     private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
@@ -107,30 +107,95 @@ public class Agreement extends GenericProtocol {
         PaxosInstance instance = paxosInstancesMap.get(instanceID);
         if (instance == null) {
             //create instance in map
-            int seq_number;
-            if (membership.isEmpty()) seq_number = 1;
-            else seq_number = membership.size();
-            PaxosInstance paxosInstance = new PaxosInstance(request.getOperation(), seq_number, request.getOpId());
-            paxosInstancesMap.put(seq_number, paxosInstance);
-        } else {
-            //broadcast prepare for all replicas
-            PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
-            for (Host host : membership) {
-                sendMessage(prepareMessage, host);
-            }
+            int selfID;
+            for (selfID = 0; selfID < membership.size(); selfID++)
+                if (membership.get(selfID).equals(myself))
+                    break;
+            instance = new PaxosInstance(request.getOperation(), selfID, request.getOpId());
+            paxosInstancesMap.put(instanceID, instance);
         }
 
+        //broadcast prepare for all replicas
+        PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
+        for (Host host : membership) {
+            sendMessage(prepareMessage, host);
+        }
 
         BroadcastMessage msg = new BroadcastMessage(request.getInstance(), request.getOpId(), request.getOperation());
         logger.debug("Sending to: " + membership);
         membership.forEach(h -> sendMessage(msg, h));
     }
 
+    private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
+        PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
+        if (instance == null) {
+            int selfID;
+            for (selfID = 0; selfID < membership.size(); selfID++)
+                if (membership.get(selfID).equals(myself))
+                    break;
+            instance = new PaxosInstance(null, selfID, null);
+            paxosInstancesMap.put(msg.getInstance(), instance);
+            PrepareOkMessage message = new PrepareOkMessage(
+                    msg.getInstance(),
+                    msg.getProposer_seq(),
+                    -1,
+                    null);
+            sendMessage(message, host);
+        } else {
+            if (msg.getProposer_seq() > instance.getHighest_prepare()) {
+                instance.setHighest_prepare(msg.getProposer_seq());
+                paxosInstancesMap.put(msg.getInstance(), instance);
+                PrepareOkMessage message = new PrepareOkMessage(
+                        msg.getInstance(),
+                        msg.getProposer_seq(),
+                        instance.getHighest_accepted(),
+                        instance.getHighest_value());
+                sendMessage(message, host);
+            }
+        }
+    }
+
+    private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
+
+    }
+
+    private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
+        PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
+        if (instance == null) {
+            int selfID;
+            for (selfID = 0; selfID < membership.size(); selfID++)
+                if (membership.get(selfID).equals(myself))
+                    break;
+            instance = new PaxosInstance(msg.getValue().getOperation(), selfID, msg.getValue().getOperationId());
+            paxosInstancesMap.put(msg.getInstance(), instance);
+            AcceptOkMessage message = new AcceptOkMessage(
+                    
+            );
+            sendMessage(message, host);
+        } else {
+
+        }
+    }
+
+    private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
+
+    }
+
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);
         //The AddReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
         //You should probably take it into account while doing whatever you do here.
-        membership.add(request.getReplica());
+        Host newHost = request.getReplica();
+        for (int i = 0; i < membership.size(); i++)
+            if (membership.isEmpty())
+                // adds the new host with no restriction if the list is empty
+                membership.add(newHost);
+            else if (newHost.toString().compareTo(membership.get(i).toString()) < 0)
+                // adds the new host to the position of the current host in the list if it's smaller
+                membership.add(i, newHost);
+            else if (i + 1 >= membership.size())
+                // new host is bigger than any other host in the list
+                membership.add(i + 1, newHost);
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
