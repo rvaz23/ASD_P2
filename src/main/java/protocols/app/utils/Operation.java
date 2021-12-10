@@ -3,6 +3,8 @@ package protocols.app.utils;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.*;
+import java.util.Arrays;
+import java.util.Objects;
 
 public class Operation {
     private final byte opType;
@@ -56,4 +58,13 @@ public class Operation {
                 ", data=" + Hex.encodeHexString(data) +
                 '}';
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || this.getClass() != o.getClass()) return false;
+        Operation operation = (Operation) o;
+        return opType == operation.opType && key.equals(operation.key) && Arrays.equals(data, operation.data);
+    }
+
 }

@@ -147,12 +147,7 @@ public class StateMachine extends GenericProtocol {
             //operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             //TODO if nextInstance - lastdecided > 5 aguardar
             pending.add(op);
-            if (waiting_decision < ONGOING) {
-                if (!decided.containsKey(nextInstance)) {
-                    sendRequest(new ProposeRequest(nextInstance++, request.getOpId().toString(), op), Agreement.PROTOCOL_ID);
-                    waiting_decision++;
-                }
-            }
+            proposePending();
 
         }
     }
