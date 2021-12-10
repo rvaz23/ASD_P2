@@ -26,18 +26,20 @@ import java.util.*;
 /**
  * This is NOT fully functional StateMachine implementation.
  * This is simply an example of things you can do, and can be used as a starting point.
- *
+ * <p>
  * You are free to change/delete anything in this class, including its fields.
  * The only thing that you cannot change are the notifications/requests between the StateMachine and the APPLICATION
  * You can change the requests/notification between the StateMachine and AGREEMENT protocol, however make sure it is
  * coherent with the specification shown in the project description.
- *
+ * <p>
  * Do not assume that any logic implemented here is correct, think for yourself!
  */
 public class StateMachine extends GenericProtocol {
     private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
     private enum State {JOINING, ACTIVE}
+
+    private static final int ONGOING = 5;
 
     //Protocol information, to register in babel
     public static final String PROTOCOL_NAME = "StateMachine";
@@ -49,17 +51,26 @@ public class StateMachine extends GenericProtocol {
     private State state;
     private List<Host> membership;
     private Map<Integer, Operation> decided;
+    private Map<Integer, Operation> mine_decided;
 
 
     private List<Operation> pending;
+    private Map<Integer, Operation> deciding;
     private int nextInstance;
+    private int lastDecided;
+    private int waiting_decision;
 
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
+        lastDecided = -1;
+        waiting_decision = 0;
 
-        decided= new HashMap<Integer,Operation>();
-        pending=new ArrayList<Operation>();
+        decided = new HashMap<Integer, Operation>();
+        pending = new LinkedList<Operation>();
+        deciding = new HashMap<Integer, Operation>();
+        mine_decided = new HashMap<Integer,Operation>();
+
         String address = props.getProperty("address");
         String port = props.getProperty("p2p_port");
 
@@ -126,19 +137,23 @@ public class StateMachine extends GenericProtocol {
     /*--------------------------------- Requests ---------------------------------------- */
     private void uponOrderRequest(OrderRequest request, short sourceProto) {
         logger.debug("Received request: " + request);
-        Operation op = new Operation((byte)1,request.getOpId().toString(),request.getOperation());
+        Operation op = new Operation((byte) 1, request.getOpId().toString(), request.getOperation());
         if (state == State.JOINING) {
             //Do something smart (like buffering the requests)
             pending.add(op);
         } else if (state == State.ACTIVE) {
             //Also do something starter, we don't want an infinite number of instances active
-        	//Maybe you should modify what is it that you are proposing so that you remember that this
-        	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
+            //Maybe you should modify what is it that you are proposing so that you remember that this
+            //operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             //TODO if nextInstance - lastdecided > 5 aguardar
             pending.add(op);
-            if (!decided.containsKey(nextInstance)){
-                sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),Agreement.PROTOCOL_ID);
+            if (waiting_decision < ONGOING) {
+                if (!decided.containsKey(nextInstance)) {
+                    sendRequest(new ProposeRequest(nextInstance++, request.getOpId().toString(), op), Agreement.PROTOCOL_ID);
+                    waiting_decision++;
+                }
             }
+
         }
     }
 
@@ -148,10 +163,50 @@ public class StateMachine extends GenericProtocol {
         //Maybe we should make sure operations are executed in order?
         //You should be careful and check if this operation if an application operation (and send it up)
         //or if this is an operations that was executed by the state machine itself (in which case you should execute)
-        if (notification.getInstance()>=nextInstance)
-            nextInstance=notification.getInstance()+1;
+        if (notification.getInstance() >= nextInstance)
+            nextInstance = notification.getInstance() + 1;
+        Operation op = notification.getOperation();
         //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
-        triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
+        decided.put(notification.getInstance(), op);
+        Operation proposed_op = deciding.remove(notification.getInstance());
+        if (proposed_op != null) {
+            if (proposed_op.equals(op)) {
+                mine_decided.put(notification.getInstance(), op);
+            } else {
+                pending.add(0, proposed_op);
+            }
+        }
+
+        triggerExecute();
+        proposePending();
+
+    }
+
+    private void triggerExecute() {
+        while (decided.get(lastDecided + 1) != null) {
+            Operation decideOp = decided.get(lastDecided + 1);
+            Operation mine = mine_decided.get(lastDecided + 1);
+            if (mine != null && mine.equals(decideOp)) {
+                triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
+            } else {
+                if (mine == null) {
+                    logger.debug(" proposed == null");
+                } else {
+                    logger.debug("Algo correu mal / mine=" + mine);
+                }
+            }
+            lastDecided++;
+            waiting_decision--;
+        }
+    }
+
+    private void proposePending() {
+        while (waiting_decision < ONGOING && !pending.isEmpty()) {
+            Operation pending_operation = pending.remove(0);
+            deciding.put(nextInstance, pending_operation);
+            sendRequest(new ProposeRequest(nextInstance++, pending_operation.getKey().toString(), pending_operation), Agreement.PROTOCOL_ID);
+            waiting_decision++;
+        }
     }
 
     /*--------------------------------- Messages ---------------------------------------- */
@@ -182,7 +237,7 @@ public class StateMachine extends GenericProtocol {
         logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
-        if(membership.contains(event.getNode()))
+        if (membership.contains(event.getNode()))
             openConnection(event.getNode());
     }
 
