@@ -102,16 +102,20 @@ public class Agreement extends GenericProtocol {
         logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
     }
 
+    private int buildSeqNum(Host[] membership){
+        for (int selfID = 0; selfID < membership.length; selfID++)
+            if (membership[selfID].equals(myself))
+                return selfID;
+        return  -1;
+    }
+
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
         int instanceID = request.getInstance();
         PaxosInstance instance = paxosInstancesMap.get(instanceID);
         if (instance == null) {
             //create instance in map
-            int selfID;
-            for (selfID = 0; selfID < membership.size(); selfID++)
-                if (membership.get(selfID).equals(myself))
-                    break;
+            int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
             instance = new PaxosInstance(request.getOperation().getData(), selfID, request.getOperation(),membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(instanceID, instance);
         }
@@ -132,10 +136,7 @@ public class Agreement extends GenericProtocol {
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (instance == null) {
-            int selfID;
-            for (selfID = 0; selfID < membership.size(); selfID++)
-                if (membership.get(selfID).equals(myself))
-                    break;
+            int selfID=buildSeqNum(membership.toArray(new Host[membership.size()]));;
             instance = new PaxosInstance(null, selfID, null,membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(msg.getInstance(), instance);
             PrepareOkMessage message = new PrepareOkMessage(
@@ -165,10 +166,7 @@ public class Agreement extends GenericProtocol {
     private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (instance == null) {
-            int selfID;
-            for (selfID = 0; selfID < membership.size(); selfID++)
-                if (membership.get(selfID).equals(myself))
-                    break;
+            int selfID=buildSeqNum(membership.toArray(new Host[membership.size()]));;
             instance = new PaxosInstance(msg.getValue().getData(), selfID, msg.getValue(),membership.toArray(new Host[membership.size()]));
             //todo ??use UUID or String as ID??
         }
@@ -192,16 +190,19 @@ public class Agreement extends GenericProtocol {
         //The AddReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
         //You should probably take it into account while doing whatever you do here.
         Host newHost = request.getReplica();
-        for (int i = 0; i < membership.size(); i++)
-            if (membership.isEmpty())
-                // adds the new host with no restriction if the list is empty
-                membership.add(newHost);
-            else if (newHost.toString().compareTo(membership.get(i).toString()) < 0)
-                // adds the new host to the position of the current host in the list if it's smaller
-                membership.add(i, newHost);
-            else if (i + 1 >= membership.size())
-                // new host is bigger than any other host in the list
-                membership.add(i + 1, newHost);
+        // adds the new host with no restriction if the list is empty
+        boolean added=false;
+        if (!membership.isEmpty()){
+            int index=0;
+            while (index< membership.size() && !added){
+                if (newHost.toString().compareTo(membership.get(index).toString()) < 0){
+                    membership.add(index, newHost);
+                    added=true;
+                }
+            }
+        }
+        if (!added)
+            membership.add(newHost);
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
