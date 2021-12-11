@@ -18,10 +18,11 @@ public class PaxosInstance {
     private boolean decided;
     private Host[] all_processes;
 
-    public PaxosInstance(byte[] proposer_value, int proposer_seq, Operation operation) {
+    public PaxosInstance(byte[] proposer_value, int proposer_seq, Operation operation,Host[] membership) {
         this.proposer_value = proposer_value;
         this.proposer_seq = proposer_seq;
         this.operation = operation;
+        this.all_processes=membership;
     }
 
     public byte[] getProposer_value() {

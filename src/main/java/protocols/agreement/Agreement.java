@@ -112,7 +112,7 @@ public class Agreement extends GenericProtocol {
             for (selfID = 0; selfID < membership.size(); selfID++)
                 if (membership.get(selfID).equals(myself))
                     break;
-            instance = new PaxosInstance(request.getOperation().getData(), selfID, request.getOperation());
+            instance = new PaxosInstance(request.getOperation().getData(), selfID, request.getOperation(),membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(instanceID, instance);
         }
 
@@ -136,7 +136,7 @@ public class Agreement extends GenericProtocol {
             for (selfID = 0; selfID < membership.size(); selfID++)
                 if (membership.get(selfID).equals(myself))
                     break;
-            instance = new PaxosInstance(null, selfID, null);
+            instance = new PaxosInstance(null, selfID, null,membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(msg.getInstance(), instance);
             PrepareOkMessage message = new PrepareOkMessage(
                     msg.getInstance(),
@@ -169,7 +169,7 @@ public class Agreement extends GenericProtocol {
             for (selfID = 0; selfID < membership.size(); selfID++)
                 if (membership.get(selfID).equals(myself))
                     break;
-            instance = new PaxosInstance(msg.getValue().getData(), selfID, msg.getValue());
+            instance = new PaxosInstance(msg.getValue().getData(), selfID, msg.getValue(),membership.toArray(new Host[membership.size()]));
             //todo ??use UUID or String as ID??
         }
         instance.setHighest_prepare(msg.getProposer_seq());
