@@ -1,35 +1,41 @@
 package protocols.agreement;
 
+import org.apache.commons.lang3.tuple.Pair;
 import protocols.app.utils.Operation;
+import protocols.app.utils.Tuple;
 import pt.unl.fct.di.novasys.network.data.Host;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.UUID;
 
 public class PaxosInstance {
 
-    private final Operation operation;
-    private byte[] proposer_value;
+    //private final Operation operation;
+    private Operation proposer_value;
     private int proposer_seq;
     private int highest_prepare;
     private int highest_accepted;
-    private byte[] highest_value;
-    private int[] prepare_ok_set;
-    private int[] accept_ok_set;
+    private Operation highest_value;
+    private List<Tuple> prepare_ok_set;
+    private List<Integer> accept_ok_set;
     private boolean decided;
     private Host[] all_processes;
 
-    public PaxosInstance(byte[] proposer_value, int proposer_seq, Operation operation,Host[] membership) {
+    public PaxosInstance(Operation proposer_value, int proposer_seq,Host[] membership) {
         this.proposer_value = proposer_value;
         this.proposer_seq = proposer_seq;
-        this.operation = operation;
         this.all_processes=membership;
+        prepare_ok_set= new LinkedList<Tuple>();
+        accept_ok_set= new LinkedList<Integer>();
+
     }
 
-    public byte[] getProposer_value() {
+    public Operation getProposer_value() {
         return proposer_value;
     }
 
-    public void setProposer_value(byte[] proposer_value) {
+    public void setProposer_value(Operation proposer_value) {
         this.proposer_value = proposer_value;
     }
 
@@ -57,27 +63,36 @@ public class PaxosInstance {
         this.highest_accepted = highest_accepted;
     }
 
-    public byte[] getHighest_value() {
+    public Operation getHighest_value() {
         return highest_value;
     }
 
-    public void setHighest_value(byte[] highest_value) {
+    public void setHighest_value(Operation highest_value) {
         this.highest_value = highest_value;
     }
 
-    public int[] getPrepare_ok_set() {
+    public List<Tuple> getPrepare_ok_set() {
         return prepare_ok_set;
     }
 
-    public void setPrepare_ok_set(int[] prepare_ok_set) {
+    public void add_prepare_ok(int na,int va){
+        Tuple pair = new Tuple(na,va);
+        prepare_ok_set.add(pair);
+    }
+
+    public void setPrepare_ok_set(List<Tuple> prepare_ok_set) {
         this.prepare_ok_set = prepare_ok_set;
     }
 
-    public int[] getAccept_ok_set() {
+    public List<Integer> getAccept_ok_set() {
         return accept_ok_set;
     }
 
-    public void setAccept_ok_set(int[] accept_ok_set) {
+    public void add_accept_ok(int element){
+        accept_ok_set.add(element);
+    }
+
+    public void setAccept_ok_set(List<Integer> accept_ok_set) {
         this.accept_ok_set = accept_ok_set;
     }
 

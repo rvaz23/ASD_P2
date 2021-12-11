@@ -5,6 +5,7 @@ import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.*;
 import protocols.agreement.timers.Timeout;
 import protocols.app.utils.Operation;
+import protocols.app.utils.Tuple;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -41,10 +42,14 @@ public class Agreement extends GenericProtocol {
     //no timeout for instances with no initial value to propose
     private HashMap<Integer, Timeout> timeoutInstancesMap;
 
-    public Agreement(Properties props) throws IOException, HandlerRegistrationException {
+    private final int fixTime;
+
+    public Agreement(Properties props,Properties properties) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         joinedInstance = -1; //-1 means we have not yet joined the system
         membership = null;
+
+        this.fixTime = Integer.parseInt(properties.getProperty("fixFingers_time", "10000"));
 
         /*--------------------- Register Timer Handlers ----------------------------- */
         registerTimerHandler(Timeout.TIMEOUT_ID, this::uponTimeout);
@@ -116,8 +121,11 @@ public class Agreement extends GenericProtocol {
         if (instance == null) {
             //create instance in map
             int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-            instance = new PaxosInstance(request.getOperation().getData(), selfID, request.getOperation(),membership.toArray(new Host[membership.size()]));
+            instance = new PaxosInstance(request.getOperation(), selfID, membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(instanceID, instance);
+        }else{
+            instance.setProposer_value(request.getOperation());
+            instance.setPrepare_ok_set(new LinkedList<Tuple>());
         }
 
         //broadcast prepare for all replicas
@@ -125,19 +133,23 @@ public class Agreement extends GenericProtocol {
         for (Host host : membership) {
             sendMessage(prepareMessage, host);
         }
+        Timeout tOut = new Timeout();
+        timeoutInstancesMap.put(instanceID,tOut);
+        setupPeriodicTimer(tOut, this.fixTime, this.fixTime);
 
+        /*
         BroadcastMessage msg = new BroadcastMessage(
                 request.getInstance(),
                 request.getOperation());
         logger.debug("Sending to: " + membership);
-        membership.forEach(h -> sendMessage(msg, h));
+        membership.forEach(h -> sendMessage(msg, h));*/
     }
 
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (instance == null) {
             int selfID=buildSeqNum(membership.toArray(new Host[membership.size()]));;
-            instance = new PaxosInstance(null, selfID, null,membership.toArray(new Host[membership.size()]));
+            instance = new PaxosInstance(null, selfID, membership.toArray(new Host[membership.size()]));
             paxosInstancesMap.put(msg.getInstance(), instance);
             PrepareOkMessage message = new PrepareOkMessage(
                     msg.getInstance(),

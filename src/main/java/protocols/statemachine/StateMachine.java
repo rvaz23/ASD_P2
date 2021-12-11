@@ -118,6 +118,7 @@ public class StateMachine extends GenericProtocol {
             initialMembership.add(h);
         }
 
+        //TODO ORDER MEMBERSHIP
         if (initialMembership.contains(self)) {
             state = State.ACTIVE;
             logger.info("Starting in ACTIVE as I am part of initial membership");
