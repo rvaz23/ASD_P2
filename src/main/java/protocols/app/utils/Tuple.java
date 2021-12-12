@@ -5,11 +5,11 @@ import org.apache.commons.lang3.tuple.Pair;
 public class Tuple {
 
     private int seq;
-    private int val;
+    private Operation val;
 
-    public Tuple(int seq, int val) {
+    public Tuple(int seq, Operation op) {
         this.seq = seq;
-        this.val = val;
+        this.val = op;
     }
 
     public int getSeq() {
@@ -20,11 +20,11 @@ public class Tuple {
         this.seq = seq;
     }
 
-    public int getVal() {
+    public Operation getVal() {
         return val;
     }
 
-    public void setVal(int val) {
+    public void setVal(Operation val) {
         this.val = val;
     }
 }

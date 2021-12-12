@@ -18,8 +18,8 @@ public class PaxosInstance {
     private int highest_accepted;
     private Operation highest_value;
     private List<Tuple> prepare_ok_set;
-    private List<Integer> accept_ok_set;
-    private boolean decided;
+    private List<Tuple> accept_ok_set;
+    private Operation decided;
     private Host[] all_processes;
 
     public PaxosInstance(Operation proposer_value, int proposer_seq,Host[] membership) {
@@ -27,7 +27,7 @@ public class PaxosInstance {
         this.proposer_seq = proposer_seq;
         this.all_processes=membership;
         prepare_ok_set= new LinkedList<Tuple>();
-        accept_ok_set= new LinkedList<Integer>();
+        accept_ok_set= new LinkedList<Tuple>();
 
     }
 
@@ -75,7 +75,7 @@ public class PaxosInstance {
         return prepare_ok_set;
     }
 
-    public void add_prepare_ok(int na,int va){
+    public void add_prepare_ok(int na,Operation va){
         Tuple pair = new Tuple(na,va);
         prepare_ok_set.add(pair);
     }
@@ -84,23 +84,23 @@ public class PaxosInstance {
         this.prepare_ok_set = prepare_ok_set;
     }
 
-    public List<Integer> getAccept_ok_set() {
+    public List<Tuple> getAccept_ok_set() {
         return accept_ok_set;
     }
 
-    public void add_accept_ok(int element){
+    public void add_accept_ok(Tuple element){
         accept_ok_set.add(element);
     }
 
-    public void setAccept_ok_set(List<Integer> accept_ok_set) {
+    public void setAccept_ok_set(List<Tuple> accept_ok_set) {
         this.accept_ok_set = accept_ok_set;
     }
 
-    public boolean isDecided() {
+    public Operation getDecided() {
         return decided;
     }
 
-    public void setDecided(boolean decided) {
+    public void setDecided(Operation decided) {
         this.decided = decided;
     }
 

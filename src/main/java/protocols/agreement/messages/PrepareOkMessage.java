@@ -1,8 +1,11 @@
 package protocols.agreement.messages;
 
 import io.netty.buffer.ByteBuf;
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
+
+import java.nio.charset.StandardCharsets;
 
 public class PrepareOkMessage extends ProtoMessage {
 
@@ -11,9 +14,9 @@ public class PrepareOkMessage extends ProtoMessage {
     private int instance;
     private int proposer_seq;
     private int highest_seq;
-    private byte[] highest_val;
+    private Operation highest_val;
 
-    public PrepareOkMessage(int instance, int proposer_seq, int highest_seq, byte[] highest_val) {
+    public PrepareOkMessage(int instance, int proposer_seq, int highest_seq, Operation highest_val) {
         super(MSG_ID);
         this.instance = instance;
         this.proposer_seq = proposer_seq;
@@ -44,7 +47,7 @@ public class PrepareOkMessage extends ProtoMessage {
         return proposer_seq;
     }
 
-    public byte[] getHighest_val() {
+    public Operation getHighest_val() {
         return highest_val;
     }
 
@@ -58,7 +61,14 @@ public class PrepareOkMessage extends ProtoMessage {
             out.writeInt(msg.instance);
             out.writeInt(msg.proposer_seq);
             out.writeInt(msg.highest_seq);
-            out.writeBytes(msg.highest_val);
+
+            out.writeByte(msg.highest_val.getOpType());
+
+            out.writeInt(msg.highest_val.getKey().length());
+            out.writeBytes(msg.highest_val.getKey().getBytes(StandardCharsets.UTF_8));
+
+            out.writeInt(msg.highest_val.getData().length);
+            out.writeBytes(msg.highest_val.getData());
         }
 
         @Override
@@ -66,7 +76,16 @@ public class PrepareOkMessage extends ProtoMessage {
             int instance = in.readInt();
             int proposer_seq = in.readInt();
             int highest_seq = in.readInt();
-            byte[] highest_val = in.array();
+
+            byte opType = in.readByte();
+
+            int keySize = in.readInt();
+            String key = in.readBytes(keySize).toString(StandardCharsets.UTF_8);
+
+            int opSize = in.readInt();
+            byte[] op = in.readBytes(opSize).array();
+
+            Operation highest_val = new Operation(opType,key,op);
             return new PrepareOkMessage(instance, proposer_seq, highest_seq, highest_val);
         }
     };
