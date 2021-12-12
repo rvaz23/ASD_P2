@@ -20,9 +20,9 @@ public class PaxosInstance {
     private List<Tuple> prepare_ok_set;
     private List<Tuple> accept_ok_set;
     private Operation decided;
-    private Host[] all_processes;
+    private List<Host> all_processes;
 
-    public PaxosInstance(Operation proposer_value, int proposer_seq,Host[] membership) {
+    public PaxosInstance(Operation proposer_value, int proposer_seq,List<Host> membership) {
         this.proposer_value = proposer_value;
         this.proposer_seq = proposer_seq;
         this.all_processes=membership;
@@ -104,11 +104,11 @@ public class PaxosInstance {
         this.decided = decided;
     }
 
-    public Host[] getAll_processes() {
+    public List<Host> getAll_processes() {
         return all_processes;
     }
 
-    public void setAll_processes(Host[] all_processes) {
+    public void setAll_processes(List<Host> all_processes) {
         this.all_processes = all_processes;
     }
 }
