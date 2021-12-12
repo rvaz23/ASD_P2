@@ -133,6 +133,13 @@ public class StateMachine extends GenericProtocol {
             // (and copy the state of that instance)
         }
 
+        Collections.sort(membership, new Comparator<Host>() {
+            @Override
+            public int compare(Host o1, Host o2) {
+                return o1.toString().compareTo(o2.toString());
+            }
+        });
+
     }
 
     /*--------------------------------- Requests ---------------------------------------- */
