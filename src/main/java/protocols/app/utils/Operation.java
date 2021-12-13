@@ -7,6 +7,13 @@ import java.util.Arrays;
 import java.util.Objects;
 
 public class Operation {
+
+    public final static byte NORMAL=(byte) 1;
+    public final static byte ADD=(byte) 2;
+    public final static byte REMOVE=(byte) 3;
+
+
+
     private final byte opType;
     private final String key;
     private final byte[] data;

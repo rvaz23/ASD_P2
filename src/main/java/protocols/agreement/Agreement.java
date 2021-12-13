@@ -83,7 +83,7 @@ public class Agreement extends GenericProtocol {
         registerMessageSerializer(cId, BroadcastMessage.MSG_ID, BroadcastMessage.serializer);
         /*---------------------- Register Message Handlers -------------------------- */
         try {
-            registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
+            //registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
             registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage);
             registerMessageHandler(cId, PrepareOkMessage.MSG_ID, this::uponPrepareOkMessage);
             registerMessageHandler(cId, AcceptMessage.MSG_ID, this::uponAcceptMessage);
@@ -296,9 +296,25 @@ public class Agreement extends GenericProtocol {
         logger.debug("Received " + request);
         //The AddReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
         //You should probably take it into account while doing whatever you do here.
-        Host newHost = request.getReplica();
+
+        membership.add(request.getReplica());
+        Set<Integer> keys = paxosInstancesMap.keySet();
+        for (Integer key : keys) {
+            if (key > request.getInstance()) {
+                PaxosInstance paxos = paxosInstancesMap.get(key);
+                if (paxos != null) {
+                    List<Host> processes = paxos.getAll_processes();
+                    processes.add(request.getReplica());
+                    paxos.setAll_processes(processes);
+                    paxosInstancesMap.put(key, paxos);
+                }
+            }
+        }
+
+
+
         // adds the new host with no restriction if the list is empty
-        boolean added = false;
+       /* boolean added = false;
         if (!membership.isEmpty()) {
             int index = 0;
             while (index < membership.size() && !added) {
@@ -309,7 +325,9 @@ public class Agreement extends GenericProtocol {
             }
         }
         if (!added)
-            membership.add(newHost);
+            membership.add(newHost);*/
+
+
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
@@ -330,6 +348,8 @@ public class Agreement extends GenericProtocol {
             }
         }
     }
+
+
 
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
         //If a message fails to be sent, for whatever reason, log the message and the reason

@@ -1,6 +1,10 @@
 package protocols.statemachine;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import protocols.agreement.notifications.JoinedNotification;
+import protocols.agreement.requests.AddReplicaRequest;
+import protocols.agreement.requests.RemoveReplicaRequest;
 import protocols.app.utils.Operation;
 
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
@@ -124,6 +128,14 @@ public class StateMachine extends GenericProtocol {
             logger.info("Starting in ACTIVE as I am part of initial membership");
             //I'm part of the initial membership, so I'm assuming the system is bootstrapping
             membership = new LinkedList<>(initialMembership);
+
+            Collections.sort(membership, new Comparator<Host>() {
+                @Override
+                public int compare(Host o1, Host o2) {
+                    return o1.toString().compareTo(o2.toString());
+                }
+            });
+
             membership.forEach(this::openConnection);
             triggerNotification(new JoinedNotification(membership, 0));
         } else {
@@ -133,19 +145,14 @@ public class StateMachine extends GenericProtocol {
             // (and copy the state of that instance)
         }
 
-        Collections.sort(membership, new Comparator<Host>() {
-            @Override
-            public int compare(Host o1, Host o2) {
-                return o1.toString().compareTo(o2.toString());
-            }
-        });
+
 
     }
 
     /*--------------------------------- Requests ---------------------------------------- */
     private void uponOrderRequest(OrderRequest request, short sourceProto) {
         logger.debug("Received request: " + request);
-        Operation op = new Operation((byte) 1, request.getOpId().toString(), request.getOperation());
+        Operation op = new Operation(Operation.NORMAL, request.getOpId().toString(), request.getOperation());
         if (state == State.JOINING) {
             //Do something smart (like buffering the requests)
             pending.add(op);
@@ -172,17 +179,40 @@ public class StateMachine extends GenericProtocol {
         //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
         decided.put(notification.getInstance(), op);
         Operation proposed_op = deciding.remove(notification.getInstance());
+
+        if (op.getOpType()!=Operation.NORMAL){
+            processReplicaManagement(notification.getInstance(), op);
+        }
+
         if (proposed_op != null) {
             if (proposed_op.equals(op)) {
-                mine_decided.put(notification.getInstance(), op);
+                if (op.getOpType()==Operation.NORMAL){
+                    mine_decided.put(notification.getInstance(), op);
+                }
             } else {
                 pending.add(0, proposed_op);
             }
         }
-
         triggerExecute();
         proposePending();
 
+    }
+
+    private void processReplicaManagement(int instance,Operation operation){
+        ByteBuf buf = Unpooled.copiedBuffer(operation.getData());
+        try {
+            Host process = Host.serializer.deserialize(buf);
+
+            if (operation.getOpType()==Operation.ADD){
+                AddReplicaRequest request = new AddReplicaRequest(instance,process);
+                sendRequest(request,Agreement.PROTOCOL_ID);
+            }else if (operation.getOpType() == Operation.REMOVE){
+                RemoveReplicaRequest request = new RemoveReplicaRequest(instance,process);
+                sendRequest(request,Agreement.PROTOCOL_ID);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void triggerExecute() {
@@ -221,19 +251,29 @@ public class StateMachine extends GenericProtocol {
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Connection to {} is up", event.getNode());
-        //TODO DO WE NEED THIS IN PAXOS
-        /*
-        Host node = event.getNode();
-        if(!membership.contains(node)){
-            membership.add(node);
-            byte[] op = "ADD"
-            Operation addNodeOp = new Operation()
-            pending.add()
-        }*/
+        ByteBuf buf = Unpooled.buffer();
+        try {
+            Host.serializer.serialize(event.getNode(),buf);
+            Operation operation = new Operation(Operation.ADD,"ADD", buf.array());
+            pending.add(0,operation);
+            proposePending();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
         logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
+        ByteBuf buf = Unpooled.buffer();
+        try {
+            Host.serializer.serialize(event.getNode(),buf);
+            Operation operation = new Operation(Operation.REMOVE,"REMOVE", buf.array());
+            pending.add(0,operation);
+            proposePending();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
