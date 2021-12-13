@@ -119,53 +119,57 @@ public class Agreement extends GenericProtocol {
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
-        int instanceID = request.getInstance();
-        PaxosInstance instance = paxosInstancesMap.get(instanceID);
-        if (instance == null) {
-            //create instance in map
-            int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-            instance = new PaxosInstance(request.getOperation(), selfID, membership);
-            paxosInstancesMap.put(instanceID, instance);
-        } else {
-            instance.setProposer_value(request.getOperation());
-            instance.setPrepare_ok_set(new LinkedList<Tuple>());
-        }
+        if (joinedInstance>=request.getInstance()) {
+            int instanceID = request.getInstance();
+            PaxosInstance instance = paxosInstancesMap.get(instanceID);
+            if (instance == null) {
+                //create instance in map
+                int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
+                instance = new PaxosInstance(request.getOperation(), selfID, membership);
+                paxosInstancesMap.put(instanceID, instance);
+            } else {
+                instance.setProposer_value(request.getOperation());
+                instance.setPrepare_ok_set(new LinkedList<Tuple>());
+            }
 
-        //broadcast prepare for all replicas
-        PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
-        for (Host host : membership) {
-            sendMessage(prepareMessage, host);
+            //broadcast prepare for all replicas
+            PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
+            for (Host host : membership) {
+                sendMessage(prepareMessage, host);
+            }
+            createTimeout(instanceID);
         }
-        createTimeout(instanceID);
     }
 
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (instance == null) {
-            if (membership.contains(host)) {
-                int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
+        if (joinedInstance>= msg.getInstance()) {
+            if (instance == null) {
+                if (membership.contains(host)) {
+                    int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
 
-                instance = new PaxosInstance(null, selfID, membership);
-                instance.setHighest_prepare(msg.getProposer_seq());
-                paxosInstancesMap.put(msg.getInstance(), instance);
-                PrepareOkMessage message = new PrepareOkMessage(
-                        msg.getInstance(),
-                        msg.getProposer_seq(),
-                        -1,
-                        null);
-                sendMessage(message, host);
-            }
-        } else {
-            if (instance.getAll_processes().contains(host)) {
-                if (msg.getProposer_seq() > instance.getHighest_prepare()) {
+                    instance = new PaxosInstance(null, selfID, membership);
                     instance.setHighest_prepare(msg.getProposer_seq());
                     paxosInstancesMap.put(msg.getInstance(), instance);
                     PrepareOkMessage message = new PrepareOkMessage(
                             msg.getInstance(),
                             msg.getProposer_seq(),
-                            instance.getHighest_accepted(),
-                            instance.getHighest_value());
+                            -1,
+                            null);
                     sendMessage(message, host);
+                }
+            } else {
+                if (instance.getAll_processes().contains(host)) {
+                    if (msg.getProposer_seq() > instance.getHighest_prepare()) {
+                        instance.setHighest_prepare(msg.getProposer_seq());
+                        paxosInstancesMap.put(msg.getInstance(), instance);
+                        PrepareOkMessage message = new PrepareOkMessage(
+                                msg.getInstance(),
+                                msg.getProposer_seq(),
+                                instance.getHighest_accepted(),
+                                instance.getHighest_value());
+                        sendMessage(message, host);
+                    }
                 }
             }
         }
@@ -187,27 +191,27 @@ public class Agreement extends GenericProtocol {
     //Nao deverá ser nula a instacia pois ja fez prepare
     private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (instance.getAll_processes().contains(host)) {
-            if (msg.getProposer_seq() == instance.getProposer_seq()) {
-                instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val());
-                if (instance.getPrepare_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
-                    Tuple highest = highest(instance.getPrepare_ok_set());
-                    if (highest.getVal() != null) {
-                        instance.setProposer_value(highest.getVal());
+        if (joinedInstance>=msg.getInstance()) {
+            if (instance.getAll_processes().contains(host)) {
+                if (msg.getProposer_seq() == instance.getProposer_seq()) {
+                    instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val());
+                    if (instance.getPrepare_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
+                        Tuple highest = highest(instance.getPrepare_ok_set());
+                        if (highest.getVal() != null) {
+                            instance.setProposer_value(highest.getVal());
+                        }
+                        AcceptMessage acceptMessage = new AcceptMessage(msg.getInstance(),
+                                instance.getProposer_seq(),
+                                instance.getProposer_value());
+                        for (Host h : instance.getAll_processes()) {
+                            sendMessage(acceptMessage, h);
+                        }
+                        instance.setPrepare_ok_set(new LinkedList<Tuple>());
+                        cancelTimeout(msg.getInstance());
+                        createTimeout(msg.getInstance());
                     }
-                    AcceptMessage acceptMessage = new AcceptMessage(msg.getInstance(),
-                            instance.getProposer_seq(),
-                            instance.getProposer_value());
-                    for (Host h : instance.getAll_processes()) {
-                        sendMessage(acceptMessage, h);
-                    }
-                    instance.setPrepare_ok_set(new LinkedList<Tuple>());
-                    cancelTimeout(msg.getInstance());
-                    createTimeout(msg.getInstance());
-
-
+                    //paxosInstancesMap.put(msg.getInstance(), instance);
                 }
-                //paxosInstancesMap.put(msg.getInstance(), instance);
             }
         }
     }
@@ -229,28 +233,29 @@ public class Agreement extends GenericProtocol {
 
     private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (instance == null) {
-            int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
+        if (joinedInstance>= msg.getInstance()) {
+            if (instance == null) {
+                int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
 
-            instance = new PaxosInstance(msg.getValue(), selfID, membership);
-            //todo ??use UUID or String as ID??
-        }
-        if (instance.getAll_processes().contains(host)) {
-            if (msg.getProposer_seq() > instance.getHighest_prepare()) {
-                instance.setHighest_prepare(msg.getProposer_seq());
-                instance.setHighest_accepted(msg.getProposer_seq());
-                instance.setHighest_value(msg.getValue());
-                paxosInstancesMap.put(msg.getInstance(), instance);
-                AcceptOkMessage message = new AcceptOkMessage(
-                        msg.getInstance(),
-                        msg.getProposer_seq(),
-                        msg.getValue());
-                for (Host h : instance.getAll_processes()) {
-                    sendMessage(message, h);
+                instance = new PaxosInstance(msg.getValue(), selfID, membership);
+                //todo ??use UUID or String as ID??
+            }
+            if (instance.getAll_processes().contains(host)) {
+                if (msg.getProposer_seq() > instance.getHighest_prepare()) {
+                    instance.setHighest_prepare(msg.getProposer_seq());
+                    instance.setHighest_accepted(msg.getProposer_seq());
+                    instance.setHighest_value(msg.getValue());
+                    paxosInstancesMap.put(msg.getInstance(), instance);
+                    AcceptOkMessage message = new AcceptOkMessage(
+                            msg.getInstance(),
+                            msg.getProposer_seq(),
+                            msg.getValue());
+                    for (Host h : instance.getAll_processes()) {
+                        sendMessage(message, h);
+                    }
                 }
             }
         }
-
     }
 
     private boolean verifyIfAllEq(List<Tuple> accept_set, Tuple pair) {
@@ -273,22 +278,24 @@ public class Agreement extends GenericProtocol {
 
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (instance.getAll_processes().contains(host)) {
-            Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
-            if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
-                instance.add_accept_ok(pair);
-            } else if (verifyIfBigger(instance.getAccept_ok_set(), pair)) {
-                List<Tuple> list = new LinkedList<Tuple>();
-                list.add(pair);
-                instance.setAccept_ok_set(list);
+        if (joinedInstance>=msg.getInstance()) {
+            if (instance.getAll_processes().contains(host)) {
+                Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
+                if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
+                    instance.add_accept_ok(pair);
+                } else if (verifyIfBigger(instance.getAccept_ok_set(), pair)) {
+                    List<Tuple> list = new LinkedList<Tuple>();
+                    list.add(pair);
+                    instance.setAccept_ok_set(list);
+                }
+                if (instance.getDecided() == null && instance.getAccept_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
+                    instance.setDecided(pair.getVal());
+                    triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
+                    if (instance.getProposer_seq() == pair.getSeq())
+                        cancelTimeout(msg.getInstance());
+                }
+                //paxosInstancesMap.put(msg.getInstance(), instance);
             }
-            if (instance.getDecided() == null && instance.getAccept_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
-                instance.setDecided(pair.getVal());
-                triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
-                if (instance.getProposer_seq() == pair.getSeq())
-                    cancelTimeout(msg.getInstance());
-            }
-            //paxosInstancesMap.put(msg.getInstance(), instance);
         }
     }
 
