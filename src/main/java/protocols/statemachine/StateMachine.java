@@ -2,9 +2,15 @@ package protocols.statemachine;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import protocols.agreement.PaxosInstance;
+import protocols.agreement.messages.AcceptMessage;
+import protocols.agreement.messages.NotifyMessage;
+import protocols.agreement.messages.PrepareMessage;
+import protocols.agreement.messages.RPCMessage;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
+import protocols.agreement.timers.TimerRPC;
 import protocols.app.utils.Operation;
 
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
@@ -73,7 +79,7 @@ public class StateMachine extends GenericProtocol {
         decided = new HashMap<Integer, Operation>();
         pending = new LinkedList<Operation>();
         deciding = new HashMap<Integer, Operation>();
-        mine_decided = new HashMap<Integer,Operation>();
+        mine_decided = new HashMap<Integer, Operation>();
 
         String address = props.getProperty("address");
         String port = props.getProperty("p2p_port");
@@ -96,11 +102,16 @@ public class StateMachine extends GenericProtocol {
         registerChannelEventHandler(channelId, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
         registerChannelEventHandler(channelId, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
+        registerMessageHandler(channelId, AcceptMessage.MSG_ID, this::uponNotifyMessage);
+
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
 
         /*--------------------- Register Notification Handlers ----------------------------- */
         subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
+
+        /*--------------------- Register Timer Handlers ----------------------------- */
+        registerTimerHandler(TimerRPC.TIMEOUT_ID, this::uponRPC);
     }
 
     @Override
@@ -144,9 +155,6 @@ public class StateMachine extends GenericProtocol {
             //You have to do something to join the system and know which instance you joined
             // (and copy the state of that instance)
         }
-
-
-
     }
 
     /*--------------------------------- Requests ---------------------------------------- */
@@ -180,13 +188,13 @@ public class StateMachine extends GenericProtocol {
         decided.put(notification.getInstance(), op);
         Operation proposed_op = deciding.remove(notification.getInstance());
 
-        if (op.getOpType()!=Operation.NORMAL){
+        if (op.getOpType() != Operation.NORMAL) {
             processReplicaManagement(notification.getInstance(), op);
         }
 
         if (proposed_op != null) {
             if (proposed_op.equals(op)) {
-                if (op.getOpType()==Operation.NORMAL){
+                if (op.getOpType() == Operation.NORMAL) {
                     mine_decided.put(notification.getInstance(), op);
                 }
             } else {
@@ -195,24 +203,29 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
-
     }
 
-    private void processReplicaManagement(int instance,Operation operation){
+    private void processReplicaManagement(int instance, Operation operation) {
         ByteBuf buf = Unpooled.copiedBuffer(operation.getData());
         try {
             Host process = Host.serializer.deserialize(buf);
 
-            if (operation.getOpType()==Operation.ADD){
-                AddReplicaRequest request = new AddReplicaRequest(instance,process);
-                sendRequest(request,Agreement.PROTOCOL_ID);
-            }else if (operation.getOpType() == Operation.REMOVE){
-                RemoveReplicaRequest request = new RemoveReplicaRequest(instance,process);
-                sendRequest(request,Agreement.PROTOCOL_ID);
+            if (operation.getOpType() == Operation.ADD) {
+                AddReplicaRequest request = new AddReplicaRequest(instance, process);
+                sendRequest(request, Agreement.PROTOCOL_ID);
+                sendMessage(new NotifyMessage(instance, membership), process);
+            } else if (operation.getOpType() == Operation.REMOVE) {
+                RemoveReplicaRequest request = new RemoveReplicaRequest(instance, process);
+                sendRequest(request, Agreement.PROTOCOL_ID);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void uponNotifyMessage(NotifyMessage msg, Host host, short sourceProto, int channelId) {
+        int instance = msg.getInstance();
+        triggerNotification(new JoinedNotification(msg.getMembership(), instance));
     }
 
     private void triggerExecute() {
@@ -253,9 +266,9 @@ public class StateMachine extends GenericProtocol {
         logger.info("Connection to {} is up", event.getNode());
         ByteBuf buf = Unpooled.buffer();
         try {
-            Host.serializer.serialize(event.getNode(),buf);
-            Operation operation = new Operation(Operation.ADD,"ADD", buf.array());
-            pending.add(0,operation);
+            Host.serializer.serialize(event.getNode(), buf);
+            Operation operation = new Operation(Operation.ADD, "ADD", buf.array());
+            pending.add(0, operation);
             proposePending();
         } catch (IOException e) {
             e.printStackTrace();
@@ -266,9 +279,9 @@ public class StateMachine extends GenericProtocol {
         logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
         ByteBuf buf = Unpooled.buffer();
         try {
-            Host.serializer.serialize(event.getNode(),buf);
-            Operation operation = new Operation(Operation.REMOVE,"REMOVE", buf.array());
-            pending.add(0,operation);
+            Host.serializer.serialize(event.getNode(), buf);
+            Operation operation = new Operation(Operation.REMOVE, "REMOVE", buf.array());
+            pending.add(0, operation);
             proposePending();
         } catch (IOException e) {
             e.printStackTrace();
@@ -290,6 +303,13 @@ public class StateMachine extends GenericProtocol {
 
     private void uponInConnectionDown(InConnectionDown event, int channelId) {
         logger.trace("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
+    }
+
+    private void uponRPC(TimerRPC timer, long timerID) {
+        RPCMessage message = new RPCMessage(lastDecided);
+        for (Host host : membership) {
+            sendMessage(message, host);
+        }
     }
 
 }
