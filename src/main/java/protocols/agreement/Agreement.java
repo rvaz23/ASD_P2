@@ -207,7 +207,7 @@ public class Agreement extends GenericProtocol {
 
 
                 }
-                paxosInstancesMap.put(msg.getInstance(), instance);
+                //paxosInstancesMap.put(msg.getInstance(), instance);
             }
         }
     }
@@ -288,7 +288,7 @@ public class Agreement extends GenericProtocol {
                 if (instance.getProposer_seq() == pair.getSeq())
                     cancelTimeout(msg.getInstance());
             }
-            paxosInstancesMap.put(msg.getInstance(), instance);
+            //paxosInstancesMap.put(msg.getInstance(), instance);
         }
     }
 
