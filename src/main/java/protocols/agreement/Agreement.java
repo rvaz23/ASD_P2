@@ -279,6 +279,13 @@ public class Agreement extends GenericProtocol {
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance>=msg.getInstance()) {
+            if (instance == null) {
+                int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
+
+                instance = new PaxosInstance(msg.getValue(), selfID, membership);
+                //todo ??use UUID or String as ID??
+            }
+
             if (instance.getAll_processes().contains(host)) {
                 Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
                 if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
