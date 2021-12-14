@@ -115,10 +115,10 @@ public class Agreement extends GenericProtocol {
         membership = new LinkedList<>(notification.getMembership());
         logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
         System.out.println(myself.getPort());
-            Operation op = new Operation(Operation.NORMAL,String.valueOf(myself.getPort()),"Teste".getBytes(StandardCharsets.UTF_8));
-            ProposeRequest pr = new ProposeRequest(0,"TESTE",op);
-            uponProposeRequest(pr,Agreement.PROTOCOL_ID);
-            System.out.println("Teste");
+        Operation op = new Operation(Operation.NORMAL, String.valueOf(myself.getPort()), "Teste".getBytes(StandardCharsets.UTF_8));
+        ProposeRequest pr = new ProposeRequest(0, "TESTE", op);
+        uponProposeRequest(pr, Agreement.PROTOCOL_ID);
+        System.out.println("Teste");
     }
 
     private int buildSeqNum(Host[] membership) {
@@ -130,7 +130,8 @@ public class Agreement extends GenericProtocol {
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.info("Received " + request);
-        if (joinedInstance >= request.getInstance() && joinedInstance>=0) {
+        //todo a instancia da mensagem nao deveria ser maior ou igual a mim?
+        if (joinedInstance >= request.getInstance() && joinedInstance >= 0) {
             int instanceID = request.getInstance();
             PaxosInstance instance = paxosInstancesMap.get(instanceID);
             if (instance == null) {
@@ -153,9 +154,9 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
-        logger.info("Prepare from {} " + msg.toString(),host.toString());
+        logger.info("Prepare from {} " + msg.toString(), host.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance>=0) {
+        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 if (membership.contains(host)) {
                     int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
@@ -174,7 +175,6 @@ public class Agreement extends GenericProtocol {
                 if (instance.getAll_processes().contains(host)) {
                     if (msg.getProposer_seq() > instance.getHighest_prepare()) {
                         instance.setHighest_prepare(msg.getProposer_seq());
-                        paxosInstancesMap.put(msg.getInstance(), instance);
                         PrepareOkMessage message = new PrepareOkMessage(
                                 msg.getInstance(),
                                 msg.getProposer_seq(),
@@ -187,6 +187,7 @@ public class Agreement extends GenericProtocol {
         }
     }
 
+    //searches for the highest seq_number and returns the corresponding tuple
     private Tuple highest(List<Tuple> set) {
         Tuple res = null;
         for (Tuple pair : set) {
@@ -204,7 +205,7 @@ public class Agreement extends GenericProtocol {
     private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("PrepareOk {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance>=0) {
+        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
             if (instance.getAll_processes().contains(host)) {
                 if (msg.getProposer_seq() == instance.getProposer_seq()) {
                     instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val());
@@ -213,6 +214,7 @@ public class Agreement extends GenericProtocol {
                         if (highest.getVal() != null) {
                             instance.setProposer_value(highest.getVal());
                         }
+                        //todo isto nao deveria estar dentro do if acima?
                         AcceptMessage acceptMessage = new AcceptMessage(msg.getInstance(),
                                 instance.getProposer_seq(),
                                 instance.getProposer_value());
@@ -222,7 +224,6 @@ public class Agreement extends GenericProtocol {
                         instance.setPrepare_ok_set(new LinkedList<Tuple>());
                         createTimeout(msg.getInstance());
                     }
-                    //paxosInstancesMap.put(msg.getInstance(), instance);
                 }
             }
         }
@@ -231,28 +232,24 @@ public class Agreement extends GenericProtocol {
     private void createTimeout(int instance) {
         //setupPeriodicTimer(timeOut, this.fixTime, this.fixTime);
         long timerId = setupTimer(new Timeout(), this.fixTime);
-        PaxosInstance paxos =paxosInstancesMap.get(instance);
+        PaxosInstance paxos = paxosInstancesMap.get(instance);
         paxos.setTimerId(timerId);
-        timeoutInstancesMap.put(timerId,instance);
-
+        timeoutInstancesMap.put(timerId, instance);
     }
 
     private void cancelTimeout(int instance) {
-        PaxosInstance paxos =paxosInstancesMap.get(instance);
+        PaxosInstance paxos = paxosInstancesMap.get(instance);
         System.out.println(cancelTimer(paxos.getTimerId()));
         timeoutInstancesMap.remove(paxos.getTimerId());
-
     }
 
     private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("Accept {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance>=0) {
+        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-
                 instance = new PaxosInstance(msg.getValue(), selfID, membership);
-                //todo ??use UUID or String as ID??
             }
             if (instance.getAll_processes().contains(host)) {
                 if (msg.getProposer_seq() >= instance.getHighest_prepare()) {
@@ -292,34 +289,31 @@ public class Agreement extends GenericProtocol {
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("AcceptOk " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance>=0) {
+        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-
                 instance = new PaxosInstance(msg.getValue(), selfID, membership);
-                //todo ??use UUID or String as ID??
             }
 
             if (instance.getAll_processes().contains(host)) {
                 Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
 
                 if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
-                    logger.info("Adiciona par");
+                    logger.info("Adiciona par porque são todos iguais");
                     instance.add_accept_ok(pair);
                 } else if (verifyIfBigger(instance.getAccept_ok_set(), pair)) {
-                    logger.info("Vai adicionar novo set");
+                    logger.info("Vai adicionar novo set porque este é amior que todos até agora");
                     List<Tuple> list = new LinkedList<Tuple>();
                     list.add(pair);
                     instance.setAccept_ok_set(list);
                 }
                 if (instance.getDecided() == null && instance.getAccept_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
                     instance.setDecided(pair.getVal());
-                    logger.info("Decide "+pair.getVal());
+                    logger.info("Decide " + pair.getVal());
                     triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
                     if (instance.getProposer_seq() == pair.getSeq())
                         cancelTimeout(msg.getInstance());
                 }
-                //paxosInstancesMap.put(msg.getInstance(), instance);
             }
         }
     }
@@ -387,18 +381,18 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponTimeout(Timeout timer, long timerID) {
-            int InstanceId = timeoutInstancesMap.get(timerID);
-            PaxosInstance instance = paxosInstancesMap.get(InstanceId);
-            if (instance.getDecided() == null) {
-                int nSeq = instance.getProposer_seq() + instance.getAll_processes().size();
-                instance.setProposer_seq(nSeq);
-                PrepareMessage prepareMessage = new PrepareMessage(InstanceId, nSeq);
-                for (Host h : instance.getAll_processes()) {
-                    sendMessage(prepareMessage, h);
-                }
-                instance.setPrepare_ok_set(new LinkedList<Tuple>());
-                createTimeout(InstanceId);
-                paxosInstancesMap.put(InstanceId, instance);
+        int InstanceId = timeoutInstancesMap.get(timerID);
+        PaxosInstance instance = paxosInstancesMap.get(InstanceId);
+        if (instance.getDecided() == null) {
+            int nSeq = instance.getProposer_seq() + instance.getAll_processes().size();
+            instance.setProposer_seq(nSeq);
+            PrepareMessage prepareMessage = new PrepareMessage(InstanceId, nSeq);
+            for (Host h : instance.getAll_processes()) {
+                sendMessage(prepareMessage, h);
             }
+            instance.setPrepare_ok_set(new LinkedList<Tuple>());
+            createTimeout(InstanceId);
+            paxosInstancesMap.put(InstanceId, instance);
+        }
     }
 }
