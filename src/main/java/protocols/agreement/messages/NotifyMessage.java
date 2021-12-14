@@ -11,7 +11,7 @@ import java.util.List;
 
 public class NotifyMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 103;
+    public static final short MSG_ID = 104;
 
     private int instance;
     private List<Host> membership;

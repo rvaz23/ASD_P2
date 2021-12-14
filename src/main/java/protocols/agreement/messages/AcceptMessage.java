@@ -5,11 +5,12 @@ import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 public class AcceptMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 104;
+    public static final short MSG_ID = 101;
 
     private int instance;
     private int proposer_seq;
@@ -29,23 +30,35 @@ public class AcceptMessage extends ProtoMessage {
 
     @Override
     public String toString() {
-        return "PrepareMessage{" +
+        return "AcceptMessage{" +
                 "instance=" + instance +
                 ", proposer_seq=" + proposer_seq +
                 ", value=" + value +
                 '}';
     }
 
-    public int getProposer_seq() {
-        return proposer_seq;
-    }
-
     public int getInstance() {
         return instance;
     }
 
+    public void setInstance(int instance) {
+        this.instance = instance;
+    }
+
+    public int getProposer_seq() {
+        return proposer_seq;
+    }
+
+    public void setProposer_seq(int proposer_seq) {
+        this.proposer_seq = proposer_seq;
+    }
+
     public Operation getValue() {
         return value;
+    }
+
+    public void setValue(Operation value) {
+        this.value = value;
     }
 
     public static ISerializer<AcceptMessage> serializer = new ISerializer<AcceptMessage>() {
@@ -54,13 +67,21 @@ public class AcceptMessage extends ProtoMessage {
             out.writeInt(msg.instance);
             out.writeInt(msg.proposer_seq);
 
-            out.writeInt(msg.value.getData().length);
-            out.writeBytes(msg.value.getData());
+            if (msg.value != null) {
+                out.writeByte(1);
+                out.writeByte(msg.value.getOpType());
 
-            out.writeInt(msg.value.getKey().length());
-            out.writeBytes(msg.value.getKey().getBytes(StandardCharsets.UTF_8));
+                out.writeInt(msg.value.getKey().length());
+                out.writeBytes(msg.value.getKey().getBytes(StandardCharsets.UTF_8));
 
-            out.writeByte(msg.value.getOpType());
+                int dataSize = msg.value.getData().length;
+
+                out.writeInt(dataSize);
+                out.writeBytes(msg.value.getData());
+
+            } else {
+                out.writeByte(0);
+            }
         }
 
         @Override
@@ -68,14 +89,24 @@ public class AcceptMessage extends ProtoMessage {
             int instance = in.readInt();
             int proposer_seq = in.readInt();
 
-            int data_size = in.readInt();
-            byte[] data = in.readBytes(data_size).array();
+            byte exists = in.readByte();
 
-            int opID_size = in.readInt();
-            String opID = in.readBytes(opID_size).toString();
+            Operation val=null;
+            if (exists == 1) {
+                byte opType = in.readByte();
 
-            byte opType = in.readByte();
-            return new AcceptMessage(instance, proposer_seq, new Operation(opType, opID, data));
+                int opID_size = in.readInt();
+                byte[] opID_array = new byte[opID_size];
+                in.readBytes(opID_array);
+                String opID = new String(opID_array, StandardCharsets.UTF_8);
+
+                int data_size = in.readInt();
+                byte[] data = new byte[data_size];
+                in.readBytes(data);
+                val =new Operation(opType, opID, data);
+            }
+
+            return new AcceptMessage(instance, proposer_seq, val);
         }
     };
 

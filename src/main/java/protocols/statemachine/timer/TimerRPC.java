@@ -1,4 +1,4 @@
-package protocols.agreement.timers;
+package protocols.statemachine.timer;
 
 import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 

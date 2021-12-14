@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 
 public class PrepareOkMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 103;
+    public static final short MSG_ID = 106;
 
     private int instance;
     private int proposer_seq;
@@ -31,7 +31,7 @@ public class PrepareOkMessage extends ProtoMessage {
 
     @Override
     public String toString() {
-        return "PrepareMessage{" +
+        return "PrepareMessageOk{" +
                 "instance=" + instance +
                 ", proposer_seq=" + proposer_seq +
                 ", highest_seq=" + highest_seq +
@@ -62,13 +62,20 @@ public class PrepareOkMessage extends ProtoMessage {
             out.writeInt(msg.proposer_seq);
             out.writeInt(msg.highest_seq);
 
-            out.writeByte(msg.highest_val.getOpType());
 
-            out.writeInt(msg.highest_val.getKey().length());
-            out.writeBytes(msg.highest_val.getKey().getBytes(StandardCharsets.UTF_8));
+            if (msg.highest_val!=null){
+                out.writeByte(1);
+                out.writeByte(msg.highest_val.getOpType());
 
-            out.writeInt(msg.highest_val.getData().length);
-            out.writeBytes(msg.highest_val.getData());
+                out.writeInt(msg.highest_val.getKey().length());
+                out.writeBytes(msg.highest_val.getKey().getBytes(StandardCharsets.UTF_8));
+
+                out.writeInt(msg.highest_val.getData().length);
+                out.writeBytes(msg.highest_val.getData());
+            }else{
+                out.writeByte(0);
+            }
+
         }
 
         @Override
@@ -77,15 +84,25 @@ public class PrepareOkMessage extends ProtoMessage {
             int proposer_seq = in.readInt();
             int highest_seq = in.readInt();
 
-            byte opType = in.readByte();
+            byte exists=in.readByte();
 
-            int keySize = in.readInt();
-            String key = in.readBytes(keySize).toString(StandardCharsets.UTF_8);
+            Operation highest_val=null;
+            if (exists==1){
 
-            int opSize = in.readInt();
-            byte[] op = in.readBytes(opSize).array();
+                byte opType = in.readByte();
 
-            Operation highest_val = new Operation(opType,key,op);
+                int opID_size = in.readInt();
+                byte[] opID_array = new byte[opID_size];
+                in.readBytes(opID_array);
+                String opID = new String(opID_array, StandardCharsets.UTF_8);
+
+                int data_size = in.readInt();
+                byte[] data = new byte[data_size];
+                in.readBytes(data);
+                highest_val =new Operation(opType, opID, data);
+            }
+
+
             return new PrepareOkMessage(instance, proposer_seq, highest_seq, highest_val);
         }
     };

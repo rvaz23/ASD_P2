@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public class PrepareMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 102;
+    public static final short MSG_ID = 105;
 
     private int instance;
     private int proposer_seq;

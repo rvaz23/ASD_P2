@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 
 public class AcceptOkMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 104;
+    public static final short MSG_ID = 102;
 
     private int instance;
     private int proposer_seq;
@@ -29,7 +29,7 @@ public class AcceptOkMessage extends ProtoMessage {
 
     @Override
     public String toString() {
-        return "PrepareMessage{" +
+        return "AcceptOkMessage{" +
                 "instance=" + instance +
                 ", proposer_seq=" + proposer_seq +
                 ", value=" + value +
@@ -54,13 +54,21 @@ public class AcceptOkMessage extends ProtoMessage {
             out.writeInt(msg.instance);
             out.writeInt(msg.proposer_seq);
 
-            out.writeInt(msg.value.getData().length);
-            out.writeBytes(msg.value.getData());
+            if (msg.value != null) {
+                out.writeByte(1);
+                out.writeByte(msg.value.getOpType());
 
-            out.writeInt(msg.value.getKey().length());
-            out.writeBytes(msg.value.getKey().getBytes(StandardCharsets.UTF_8));
+                out.writeInt(msg.value.getKey().length());
+                out.writeBytes(msg.value.getKey().getBytes(StandardCharsets.UTF_8));
 
-            out.writeByte(msg.value.getOpType());
+                int dataSize = msg.value.getData().length;
+
+                out.writeInt(dataSize);
+                out.writeBytes(msg.value.getData());
+
+            } else {
+                out.writeByte(0);
+            }
         }
 
         @Override
@@ -68,15 +76,24 @@ public class AcceptOkMessage extends ProtoMessage {
             int instance = in.readInt();
             int proposer_seq = in.readInt();
 
-            int data_size = in.readInt();
-            byte[] data = in.readBytes(data_size).array();
+            byte exists = in.readByte();
 
-            int opID_size = in.readInt();
-            String opID = in.readBytes(opID_size).toString();
+            Operation val=null;
+            if (exists == 1) {
+                byte opType = in.readByte();
 
-            byte opType = in.readByte();
+                int opID_size = in.readInt();
+                byte[] opID_array = new byte[opID_size];
+                in.readBytes(opID_array);
+                String opID = new String(opID_array, StandardCharsets.UTF_8);
 
-            return new AcceptOkMessage(instance, proposer_seq, new Operation(opType, opID, data));
+                int data_size = in.readInt();
+                byte[] data = new byte[data_size];
+                in.readBytes(data);
+                val =new Operation(opType, opID, data);
+            }
+
+            return new AcceptOkMessage(instance, proposer_seq, val);
         }
     };
 

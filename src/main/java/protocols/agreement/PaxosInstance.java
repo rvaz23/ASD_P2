@@ -22,6 +22,8 @@ public class PaxosInstance {
     private Operation decided;
     private List<Host> all_processes;
 
+    private long timerId;
+
     public PaxosInstance(Operation proposer_value, int proposer_seq,List<Host> membership) {
         this.proposer_value = proposer_value;
         this.proposer_seq = proposer_seq;
@@ -110,5 +112,13 @@ public class PaxosInstance {
 
     public void setAll_processes(List<Host> all_processes) {
         this.all_processes = all_processes;
+    }
+
+    public long getTimerId() {
+        return timerId;
+    }
+
+    public void setTimerId(long timerId) {
+        this.timerId = timerId;
     }
 }

@@ -1,4 +1,4 @@
-package protocols.agreement.messages;
+package protocols.statemachine.messages;
 
 import io.netty.buffer.ByteBuf;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -6,7 +6,7 @@ import pt.unl.fct.di.novasys.network.ISerializer;
 
 public class RPCMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 103;
+    public static final short MSG_ID = 201;
 
     private int lastDecided;
 

@@ -2,15 +2,13 @@ package protocols.statemachine;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import protocols.agreement.PaxosInstance;
 import protocols.agreement.messages.AcceptMessage;
 import protocols.agreement.messages.NotifyMessage;
-import protocols.agreement.messages.PrepareMessage;
-import protocols.agreement.messages.RPCMessage;
+import protocols.statemachine.messages.RPCMessage;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
-import protocols.agreement.timers.TimerRPC;
+import protocols.statemachine.timer.TimerRPC;
 import protocols.app.utils.Operation;
 
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
@@ -49,7 +47,7 @@ public class StateMachine extends GenericProtocol {
 
     private enum State {JOINING, ACTIVE}
 
-    private static final int ONGOING = 5;
+    private static final int ONGOING = 1;
 
     //Protocol information, to register in babel
     public static final String PROTOCOL_NAME = "StateMachine";
@@ -264,29 +262,32 @@ public class StateMachine extends GenericProtocol {
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Connection to {} is up", event.getNode());
-        ByteBuf buf = Unpooled.buffer();
-        try {
-            Host.serializer.serialize(event.getNode(), buf);
-            Operation operation = new Operation(Operation.ADD, "ADD", buf.array());
-            pending.add(0, operation);
-            proposePending();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        /*if (!membership.contains(event.getNode())) {
+            ByteBuf buf = Unpooled.buffer();
+            try {
+                Host.serializer.serialize(event.getNode(), buf);
+                Operation operation = new Operation(Operation.ADD, "ADD", buf.array());
+                pending.add(0, operation);
+                proposePending();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }*/
     }
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-        logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
-        ByteBuf buf = Unpooled.buffer();
-        try {
-            Host.serializer.serialize(event.getNode(), buf);
-            Operation operation = new Operation(Operation.REMOVE, "REMOVE", buf.array());
-            pending.add(0, operation);
-            proposePending();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        logger.info("Connection to {} is down, cause {}", event.getNode(), event.getCause());
+        /*if (membership.contains(event.getNode())) {
+            ByteBuf buf = Unpooled.buffer();
+            try {
+                Host.serializer.serialize(event.getNode(), buf);
+                Operation operation = new Operation(Operation.REMOVE, "REMOVE", buf.array());
+                pending.add(0, operation);
+                proposePending();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }*/
     }
 
     private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
