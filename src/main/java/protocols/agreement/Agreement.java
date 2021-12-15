@@ -114,11 +114,11 @@ public class Agreement extends GenericProtocol {
         joinedInstance = notification.getJoinInstance();
         membership = new LinkedList<>(notification.getMembership());
         logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
-        System.out.println(myself.getPort());
+        /*System.out.println(myself.getPort());
         Operation op = new Operation(Operation.NORMAL, String.valueOf(myself.getPort()), "Teste".getBytes(StandardCharsets.UTF_8));
         ProposeRequest pr = new ProposeRequest(0, "TESTE", op);
         uponProposeRequest(pr, Agreement.PROTOCOL_ID);
-        System.out.println("Teste");
+        System.out.println("Teste");*/
     }
 
     private int buildSeqNum(Host[] membership) {
@@ -131,7 +131,7 @@ public class Agreement extends GenericProtocol {
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.info("Received " + request);
         //todo a instancia da mensagem nao deveria ser maior ou igual a mim?
-        if (joinedInstance >= request.getInstance() && joinedInstance >= 0) {
+        if (joinedInstance <= request.getInstance() && joinedInstance >= 0) {
             int instanceID = request.getInstance();
             PaxosInstance instance = paxosInstancesMap.get(instanceID);
             if (instance == null) {
@@ -156,7 +156,7 @@ public class Agreement extends GenericProtocol {
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("Prepare from {} " + msg.toString(), host.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
+        if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 if (membership.contains(host)) {
                     int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
@@ -205,7 +205,7 @@ public class Agreement extends GenericProtocol {
     private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("PrepareOk {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
+        if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance.getAll_processes().contains(host)) {
                 if (msg.getProposer_seq() == instance.getProposer_seq()) {
                     instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val());
@@ -246,7 +246,7 @@ public class Agreement extends GenericProtocol {
     private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("Accept {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
+        if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
                 instance = new PaxosInstance(msg.getValue(), selfID, membership);
@@ -289,7 +289,7 @@ public class Agreement extends GenericProtocol {
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.info("AcceptOk " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
-        if (joinedInstance >= msg.getInstance() && joinedInstance >= 0) {
+        if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
                 instance = new PaxosInstance(msg.getValue(), selfID, membership);

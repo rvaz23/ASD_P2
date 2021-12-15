@@ -230,7 +230,9 @@ public class StateMachine extends GenericProtocol {
         while (decided.get(lastDecided + 1) != null) {
             Operation decideOp = decided.get(lastDecided + 1);
             Operation mine = mine_decided.get(lastDecided + 1);
+            logger.info("State Machine decided {} for instance {}",decideOp.getKey(),lastDecided+1 );
             if (mine != null && mine.equals(decideOp)) {
+                logger.info("Trigger Execute {} for instance {}",decideOp.getKey(),lastDecided+1 );
                 triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
             } else {
                 if (mine == null) {
