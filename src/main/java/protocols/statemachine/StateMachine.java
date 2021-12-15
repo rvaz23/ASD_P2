@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import protocols.agreement.messages.AcceptMessage;
 import protocols.agreement.messages.NotifyMessage;
+import protocols.app.HashApp;
 import protocols.statemachine.messages.RPCMessage;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
@@ -26,10 +27,14 @@ import protocols.agreement.requests.ProposeRequest;
 import protocols.statemachine.notifications.ExecuteNotification;
 import protocols.statemachine.requests.OrderRequest;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This is NOT fully functional StateMachine implementation.
@@ -52,12 +57,14 @@ public class StateMachine extends GenericProtocol {
     //Protocol information, to register in babel
     public static final String PROTOCOL_NAME = "StateMachine";
     public static final short PROTOCOL_ID = 200;
+    public static final int RETRY_PERIOD = 2000;
 
     private final Host self;     //My own address/port
     private final int channelId; //Id of the created channel
 
     private State state;
     private List<Host> membership;
+    private List<Host> connected;
     private Map<Integer, Operation> decided;
     private Map<Integer, Operation> mine_decided;
 
@@ -68,16 +75,21 @@ public class StateMachine extends GenericProtocol {
     private int lastDecided;
     private int waiting_decision;
 
+    Thread connThread;
+
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
         lastDecided = -1;
         waiting_decision = 0;
 
+        connThread = new Thread();
+
         decided = new HashMap<Integer, Operation>();
         pending = new LinkedList<Operation>();
         deciding = new HashMap<Integer, Operation>();
         mine_decided = new HashMap<Integer, Operation>();
+        connected = new LinkedList<>();
 
         String address = props.getProperty("address");
         String port = props.getProperty("p2p_port");
@@ -152,6 +164,34 @@ public class StateMachine extends GenericProtocol {
             logger.info("Starting in JOINING as I am not part of initial membership");
             //You have to do something to join the system and know which instance you joined
             // (and copy the state of that instance)
+            membership = new LinkedList<>(initialMembership);
+
+            Collections.sort(membership, new Comparator<Host>() {
+                @Override
+                public int compare(Host o1, Host o2) {
+                    return o1.toString().compareTo(o2.toString());
+                }
+            });
+
+            membership.forEach(this::openConnection);
+        }
+    }
+
+    private void installState() throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        dos.writeInt(lastDecided);
+        byte[] cumulativeHash = new byte[32];
+        for (int i = 0; i < lastDecided; i++) {
+            cumulativeHash = HashApp.appendOpToHash(cumulativeHash, decided.get(i).getData());
+        }
+        dos.write(cumulativeHash);
+        dos.writeInt(lastDecided);
+        for (int i = 0; i < lastDecided; i++) {
+            Operation op = decided.get(i);
+            dos.writeUTF(op.getKey());
+            dos.writeInt(op.getData().length);
+            dos.write(op.getData());
         }
     }
 
@@ -166,7 +206,6 @@ public class StateMachine extends GenericProtocol {
             //Also do something starter, we don't want an infinite number of instances active
             //Maybe you should modify what is it that you are proposing so that you remember that this
             //operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
-            //TODO if nextInstance - lastdecided > 5 aguardar
             pending.add(op);
             proposePending();
 
@@ -230,9 +269,9 @@ public class StateMachine extends GenericProtocol {
         while (decided.get(lastDecided + 1) != null) {
             Operation decideOp = decided.get(lastDecided + 1);
             Operation mine = mine_decided.get(lastDecided + 1);
-            logger.info("State Machine decided {} for instance {}",decideOp.getKey(),lastDecided+1 );
+            logger.info("State Machine decided {} for instance {}", decideOp.getKey(), lastDecided + 1);
             if (mine != null && mine.equals(decideOp)) {
-                logger.info("Trigger Execute {} for instance {}",decideOp.getKey(),lastDecided+1 );
+                logger.info("Trigger Execute {} for instance {}", decideOp.getKey(), lastDecided + 1);
                 triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
             } else {
                 if (mine == null) {
@@ -264,8 +303,10 @@ public class StateMachine extends GenericProtocol {
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Connection to {} is up", event.getNode());
-        /*if (!membership.contains(event.getNode())) {
-            ByteBuf buf = Unpooled.buffer();
+        connected.add(event.getNode());
+        if (!membership.contains(event.getNode())) {
+            //4 bytes do address + short
+            ByteBuf buf = Unpooled.buffer(6);
             try {
                 Host.serializer.serialize(event.getNode(), buf);
                 Operation operation = new Operation(Operation.ADD, "ADD", buf.array());
@@ -274,13 +315,13 @@ public class StateMachine extends GenericProtocol {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }*/
+        }
     }
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
         logger.info("Connection to {} is down, cause {}", event.getNode(), event.getCause());
-        /*if (membership.contains(event.getNode())) {
-            ByteBuf buf = Unpooled.buffer();
+        if (membership.contains(event.getNode())) {
+            ByteBuf buf = Unpooled.buffer(6);
             try {
                 Host.serializer.serialize(event.getNode(), buf);
                 Operation operation = new Operation(Operation.REMOVE, "REMOVE", buf.array());
@@ -289,15 +330,26 @@ public class StateMachine extends GenericProtocol {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }*/
+        }
     }
 
     private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
         logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
+        // start thread to send periodic announcements
+        try {
+            logger.info("Trying connection to {} ", event.getNode());
+            openConnection(event.getNode());
+            Thread.sleep(RETRY_PERIOD);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+                   /*
         if (membership.contains(event.getNode()))
             openConnection(event.getNode());
+    */
     }
 
     private void uponInConnectionUp(InConnectionUp event, int channelId) {
