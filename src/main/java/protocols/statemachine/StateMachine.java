@@ -251,13 +251,13 @@ public class StateMachine extends GenericProtocol {
                 AddReplicaRequest request = new AddReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
                 openConnection(process);
-                sendMessage(new NotifyMessage(instance, membership), process);
-                logger.info("Added {} to membership ",process);
+                sendMessage(new NotifyMessage(instance, membership, decided), process);
+                logger.info("Added {} to membership ", process);
             } else if (operation.getOpType() == Operation.REMOVE) {
                 RemoveReplicaRequest request = new RemoveReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
                 membership.remove(process);
-                logger.info("Removed {} from membership ",process);
+                logger.info("Removed {} from membership ", process);
             }
 
         } catch (IOException e) {
@@ -267,6 +267,13 @@ public class StateMachine extends GenericProtocol {
 
     private void uponNotifyMessage(NotifyMessage msg, Host host, short sourceProto, int channelId) {
         int instance = msg.getInstance();
+        if (msg.getDecided().size() > decided.size()) {
+            decided = msg.getDecided();
+            for (Map.Entry<Integer, Operation> entry : decided.entrySet()){
+                logger.info("Decided at {} , {} ",entry.getKey(),entry.getValue().getKey());
+            }
+
+        }
         triggerNotification(new JoinedNotification(msg.getMembership(), instance));
     }
 

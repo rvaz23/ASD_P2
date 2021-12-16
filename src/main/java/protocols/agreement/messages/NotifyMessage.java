@@ -1,13 +1,16 @@
 package protocols.agreement.messages;
 
 import io.netty.buffer.ByteBuf;
+import protocols.app.utils.Operation;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
 import pt.unl.fct.di.novasys.network.data.Host;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class NotifyMessage extends ProtoMessage {
 
@@ -15,11 +18,13 @@ public class NotifyMessage extends ProtoMessage {
 
     private int instance;
     private List<Host> membership;
+    private Map<Integer, Operation> decided;
 
-    public NotifyMessage(int instance, List<Host> membership) {
+    public NotifyMessage(int instance, List<Host> membership, Map<Integer, Operation> decided) {
         super(MSG_ID);
         this.instance = instance;
         this.membership = membership;
+        this.decided=decided;
     }
 
     @Override
@@ -34,6 +39,14 @@ public class NotifyMessage extends ProtoMessage {
 
     public List<Host> getMembership() {
         return this.membership;
+    }
+
+    public Map<Integer, Operation> getDecided() {
+        return decided;
+    }
+
+    public void setDecided(Map<Integer, Operation> decided) {
+        this.decided = decided;
     }
 
     @Override
@@ -52,6 +65,11 @@ public class NotifyMessage extends ProtoMessage {
             for (Host host : msg.membership) {
                 Host.serializer.serialize(host, out);
             }
+            out.writeInt(msg.decided.size());
+            for (Map.Entry<Integer, Operation> entry : msg.decided.entrySet()) {
+                out.writeInt(entry.getKey());
+                Operation.serializer.serialize(entry.getValue(),out);
+            }
         }
 
         @Override
@@ -63,7 +81,14 @@ public class NotifyMessage extends ProtoMessage {
                 Host host = Host.serializer.deserialize(in);
                 membership.add(i, host);
             }
-            return new NotifyMessage(instance, membership);
+            int map_Size = in.readInt();
+            Map<Integer, Operation> decided = new HashMap<>();
+            for (int i=0;i<map_Size;i++){
+                int decision_instance = in.readInt();
+                Operation op = Operation.serializer.deserialize(in);
+                decided.put(decision_instance,op);
+            }
+            return new NotifyMessage(instance, membership,decided);
         }
     };
 

@@ -1,10 +1,14 @@
 package protocols.app.utils;
 
+import io.netty.buffer.ByteBuf;
 import org.apache.commons.codec.binary.Hex;
+import protocols.agreement.messages.NotifyMessage;
+import pt.unl.fct.di.novasys.network.ISerializer;
+import pt.unl.fct.di.novasys.network.data.Host;
 
 import java.io.*;
-import java.util.Arrays;
-import java.util.Objects;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class Operation {
 
@@ -73,5 +77,29 @@ public class Operation {
         Operation operation = (Operation) o;
         return opType == operation.opType && key.equals(operation.key) && Arrays.equals(data, operation.data);
     }
+
+    public static ISerializer<Operation> serializer = new ISerializer<Operation>() {
+        @Override
+        public void serialize(Operation op, ByteBuf out) throws IOException {
+            out.writeByte(op.getOpType());
+            out.writeInt(op.getKey().length());
+            out.writeBytes(op.getKey().getBytes(StandardCharsets.UTF_8));
+            out.writeInt(op.getData().length);
+            out.writeBytes(op.getData());
+        }
+
+        @Override
+        public Operation deserialize(ByteBuf in) throws IOException {
+            byte opType = in.readByte();
+            //int StringSize = in.readInt();
+            byte[] aux = new byte[in.readInt()];
+            in.readBytes(aux);
+            String key = new String(aux,StandardCharsets.UTF_8);
+            aux = new byte[in.readInt()];
+            in.readBytes(aux);
+            Operation op = new Operation(opType,key,aux);
+            return op;
+        }
+    };
 
 }
