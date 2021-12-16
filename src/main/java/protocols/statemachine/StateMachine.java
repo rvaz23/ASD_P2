@@ -143,7 +143,6 @@ public class StateMachine extends GenericProtocol {
             initialMembership.add(h);
         }
 
-        //TODO ORDER MEMBERSHIP
         if (initialMembership.contains(self)) {
             state = State.ACTIVE;
             logger.info("Starting in ACTIVE as I am part of initial membership");
@@ -346,6 +345,8 @@ public class StateMachine extends GenericProtocol {
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
         // start thread to send periodic announcements
+
+        //todo use a thread to check for a maximum number of tries
         try {
             logger.info("Trying connection to {} ", event.getNode());
             openConnection(event.getNode());

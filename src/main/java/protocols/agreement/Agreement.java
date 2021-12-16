@@ -4,12 +4,10 @@ import protocols.agreement.messages.*;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.*;
 import protocols.agreement.timers.Timeout;
-import protocols.app.utils.Operation;
 import protocols.app.utils.Tuple;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
-import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,8 +15,6 @@ import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.sql.Time;
 import java.util.*;
 
 /**
@@ -44,7 +40,7 @@ public class Agreement extends GenericProtocol {
     //no timeout for instances with no initial value to propose
     private HashMap<Long, Integer> timeoutInstancesMap;
 
-    private final int fixTime;
+    private final int agreementTime;
 
     public Agreement(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -53,7 +49,7 @@ public class Agreement extends GenericProtocol {
         paxosInstancesMap = new HashMap<>();
         timeoutInstancesMap = new HashMap<>();
 
-        this.fixTime = Integer.parseInt(props.getProperty("fixFingers_time", "10000"));
+        this.agreementTime = Integer.parseInt(props.getProperty("agreement_time", "10000"));
 
         /*--------------------- Register Timer Handlers ----------------------------- */
         registerTimerHandler(Timeout.TIMEOUT_ID, this::uponTimeout);
@@ -133,7 +129,6 @@ public class Agreement extends GenericProtocol {
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.info("Received " + request);
-        //todo a instancia da mensagem nao deveria ser maior ou igual a mim?
         if (joinedInstance <= request.getInstance() && joinedInstance >= 0) {
             int instanceID = request.getInstance();
             PaxosInstance instance = paxosInstancesMap.get(instanceID);
@@ -217,7 +212,6 @@ public class Agreement extends GenericProtocol {
                         if (highest.getVal() != null) {
                             instance.setProposer_value(highest.getVal());
                         }
-                        //todo isto nao deveria estar dentro do if acima?
                         AcceptMessage acceptMessage = new AcceptMessage(msg.getInstance(),
                                 instance.getProposer_seq(),
                                 instance.getProposer_value());
@@ -234,7 +228,7 @@ public class Agreement extends GenericProtocol {
 
     private void createTimeout(int instance) {
         //setupPeriodicTimer(timeOut, this.fixTime, this.fixTime);
-        long timerId = setupTimer(new Timeout(), this.fixTime);
+        long timerId = setupTimer(new Timeout(), this.agreementTime);
         PaxosInstance paxos = paxosInstancesMap.get(instance);
         paxos.setTimerId(timerId);
         timeoutInstancesMap.put(timerId, instance);
