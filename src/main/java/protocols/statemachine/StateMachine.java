@@ -58,6 +58,7 @@ public class StateMachine extends GenericProtocol {
     public static final String PROTOCOL_NAME = "StateMachine";
     public static final short PROTOCOL_ID = 200;
     public static final int RETRY_PERIOD = 2000;
+    public static final int MAX_TRIES = 5;
 
     private final Host self;     //My own address/port
     private final int channelId; //Id of the created channel
@@ -68,14 +69,15 @@ public class StateMachine extends GenericProtocol {
     private Map<Integer, Operation> decided;
     private Map<Integer, Operation> mine_decided;
 
+    Thread connThread;
+
 
     private List<Operation> pending;
     private Map<Integer, Operation> deciding;
     private int nextInstance;
     private int lastDecided;
     private int waiting_decision;
-
-    Thread connThread;
+    private Map<Host,Integer> failedConn;
 
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -83,8 +85,9 @@ public class StateMachine extends GenericProtocol {
         lastDecided = -1;
         waiting_decision = 0;
 
-        connThread = new Thread();
+        setConnThread();
 
+        failedConn = new HashMap<>();
         decided = new HashMap<Integer, Operation>();
         pending = new LinkedList<Operation>();
         deciding = new HashMap<Integer, Operation>();
@@ -174,6 +177,27 @@ public class StateMachine extends GenericProtocol {
 
             membership.forEach(this::openConnection);
         }
+    }
+
+
+    private void setConnThread(){
+        connThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(RETRY_PERIOD);
+                    for (Map.Entry<Host, Integer> entry : failedConn.entrySet())
+                        if (entry.getValue()>MAX_TRIES){
+                            failedConn.remove(entry.getKey(),entry.getValue());
+                        }else {
+                            openConnection(entry.getKey());
+                        }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        connThread.start();
     }
 
     private void installState() throws IOException {
@@ -316,6 +340,7 @@ public class StateMachine extends GenericProtocol {
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Connection to {} is up", event.getNode());
         connected.add(event.getNode());
+        failedConn.remove(event.getNode());
         if (!membership.contains(event.getNode())) {
             //4 bytes do address + short
             ByteBuf buf = Unpooled.buffer(6);
@@ -353,15 +378,11 @@ public class StateMachine extends GenericProtocol {
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
         // start thread to send periodic announcements
 
-        //todo use a thread to check for a maximum number of tries
-        try {
-            logger.info("Trying connection to {} ", event.getNode());
-            openConnection(event.getNode());
-            Thread.sleep(RETRY_PERIOD);
-        } catch (Exception e) {
-            e.printStackTrace();
+        Integer tries =failedConn.get(event.getNode());
+        if(tries==null){
+            tries=1;
         }
-
+        failedConn.put(event.getNode(),tries);
                    /*
         if (membership.contains(event.getNode()))
             openConnection(event.getNode());
