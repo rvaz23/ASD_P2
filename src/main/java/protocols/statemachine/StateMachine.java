@@ -112,7 +112,7 @@ public class StateMachine extends GenericProtocol {
         registerChannelEventHandler(channelId, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
         registerChannelEventHandler(channelId, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
-        registerMessageHandler(channelId, AcceptMessage.MSG_ID, this::uponNotifyMessage);
+        registerMessageHandler(channelId, NotifyMessage.MSG_ID, this::uponNotifyMessage);
 
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
@@ -248,13 +248,19 @@ public class StateMachine extends GenericProtocol {
             Host process = Host.serializer.deserialize(buf);
 
             if (operation.getOpType() == Operation.ADD) {
+                membership.add(process);
                 AddReplicaRequest request = new AddReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
+                openConnection(process);
                 sendMessage(new NotifyMessage(instance, membership), process);
+                logger.info("Added {} to membership ",process);
             } else if (operation.getOpType() == Operation.REMOVE) {
                 RemoveReplicaRequest request = new RemoveReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
+                membership.remove(process);
+                logger.info("Removed {} from membership ",process);
             }
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -318,6 +324,8 @@ public class StateMachine extends GenericProtocol {
         }
     }
 
+    //fazer timmer para checkar se os membros da membership estao ativos
+    //podemos prpor add node e antess da decisão este ser desconectado e depois fica na membership e nunca é removido
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
         logger.info("Connection to {} is down, cause {}", event.getNode(), event.getCause());
         if (membership.contains(event.getNode())) {
@@ -354,6 +362,18 @@ public class StateMachine extends GenericProtocol {
 
     private void uponInConnectionUp(InConnectionUp event, int channelId) {
         logger.trace("Connection from {} is up", event.getNode());
+        if (!membership.contains(event.getNode())) {
+            //4 bytes do address + short
+            ByteBuf buf = Unpooled.buffer(6);
+            try {
+                Host.serializer.serialize(event.getNode(), buf);
+                Operation operation = new Operation(Operation.ADD, "ADD", buf.array());
+                pending.add(0, operation);
+                proposePending();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void uponInConnectionDown(InConnectionDown event, int channelId) {

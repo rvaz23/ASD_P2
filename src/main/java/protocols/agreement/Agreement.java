@@ -111,9 +111,12 @@ public class Agreement extends GenericProtocol {
 
     private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
         //We joined the system and can now start doing things
-        joinedInstance = notification.getJoinInstance();
-        membership = new LinkedList<>(notification.getMembership());
-        logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
+        if (joinedInstance < 0 || joinedInstance != notification.getJoinInstance()){
+            joinedInstance = notification.getJoinInstance();
+            membership = new LinkedList<>(notification.getMembership());
+            logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
+        }
+
         /*System.out.println(myself.getPort());
         Operation op = new Operation(Operation.NORMAL, String.valueOf(myself.getPort()), "Teste".getBytes(StandardCharsets.UTF_8));
         ProposeRequest pr = new ProposeRequest(0, "TESTE", op);
@@ -309,7 +312,7 @@ public class Agreement extends GenericProtocol {
                 }
                 if (instance.getDecided() == null && instance.getAccept_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
                     instance.setDecided(pair.getVal());
-                    logger.info("Decide " + pair.getVal());
+                    logger.info("Decide at {} " + pair.getVal(),msg.getInstance());
                     triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
                     if (instance.getProposer_seq() == pair.getSeq())
                         cancelTimeout(msg.getInstance());
