@@ -188,6 +188,7 @@ public class StateMachine extends GenericProtocol {
                     Thread.sleep(RETRY_PERIOD);
                     for (Map.Entry<Host, Integer> entry : failedConn.entrySet())
                         if (entry.getValue()>MAX_TRIES){
+                            logger.info("MAX tries reached abort connection to {}", entry.getKey());
                             failedConn.remove(entry.getKey(),entry.getValue());
                         }else {
                             openConnection(entry.getKey());
