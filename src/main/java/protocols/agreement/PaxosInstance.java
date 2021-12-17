@@ -30,6 +30,7 @@ public class PaxosInstance {
         this.all_processes=membership;
         prepare_ok_set= new LinkedList<Tuple>();
         accept_ok_set= new LinkedList<Tuple>();
+        timerId=-1;
 
     }
 

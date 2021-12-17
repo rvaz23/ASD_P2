@@ -2,6 +2,7 @@ package protocols.statemachine;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.codec.binary.Hex;
 import protocols.agreement.messages.AcceptMessage;
 import protocols.agreement.messages.NotifyMessage;
 import protocols.app.HashApp;
@@ -30,6 +31,7 @@ import protocols.statemachine.requests.OrderRequest;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -70,6 +72,7 @@ public class StateMachine extends GenericProtocol {
     private Map<Integer, Operation> mine_decided;
 
     Thread connThread;
+    byte[] commulativeHash;
 
 
     private List<Operation> pending;
@@ -86,6 +89,7 @@ public class StateMachine extends GenericProtocol {
         waiting_decision = 0;
 
         setConnThread();
+        commulativeHash=new byte[0];
 
         failedConn = new HashMap<>();
         decided = new HashMap<Integer, Operation>();
@@ -188,7 +192,7 @@ public class StateMachine extends GenericProtocol {
                     Thread.sleep(RETRY_PERIOD);
                     for (Map.Entry<Host, Integer> entry : failedConn.entrySet())
                         if (entry.getValue()>MAX_TRIES){
-                            logger.info("MAX tries reached abort connection to {}", entry.getKey());
+                            logger.debug("MAX tries reached abort connection to {}", entry.getKey());
                             failedConn.remove(entry.getKey(),entry.getValue());
                         }else {
                             openConnection(entry.getKey());
@@ -237,7 +241,7 @@ public class StateMachine extends GenericProtocol {
     }
 
     /*--------------------------------- Notifications ---------------------------------------- */
-    private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
+    private void uponDecidedNotification(DecidedNotification notification, short sourceProto)  {
         logger.debug("Received notification: " + notification);
         //Maybe we should make sure operations are executed in order?
         //You should be careful and check if this operation if an application operation (and send it up)
@@ -247,6 +251,10 @@ public class StateMachine extends GenericProtocol {
         Operation op = notification.getOperation();
         //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
         decided.put(notification.getInstance(), op);
+
+        commulativeHash= HashApp.appendOpToHash(commulativeHash,op.getData());
+
+
         Operation proposed_op = deciding.remove(notification.getInstance());
 
         if (op.getOpType() != Operation.NORMAL) {
@@ -264,6 +272,16 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
+        computeHash(notification.getInstance());
+    }
+
+    private void computeHash(int instance){
+        if (lastDecided%100==0){
+                logger.info("Current state N_OPS= {}, MAP_SIZE={}, HASH={}",
+                        lastDecided, decided.size(),  Hex.encodeHexString(commulativeHash));
+        }
+
+
     }
 
     private void processReplicaManagement(int instance, Operation operation) {
@@ -277,12 +295,12 @@ public class StateMachine extends GenericProtocol {
                 sendRequest(request, Agreement.PROTOCOL_ID);
                 openConnection(process);
                 sendMessage(new NotifyMessage(instance, membership, decided), process);
-                logger.info("Added {} to membership ", process);
+                logger.debug("Added {} to membership ", process);
             } else if (operation.getOpType() == Operation.REMOVE) {
                 RemoveReplicaRequest request = new RemoveReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
                 membership.remove(process);
-                logger.info("Removed {} from membership ", process);
+                logger.debug("Removed {} from membership ", process);
             }
 
         } catch (IOException e) {
@@ -306,9 +324,9 @@ public class StateMachine extends GenericProtocol {
         while (decided.get(lastDecided + 1) != null) {
             Operation decideOp = decided.get(lastDecided + 1);
             Operation mine = mine_decided.get(lastDecided + 1);
-            logger.info("State Machine decided {} for instance {}", decideOp.getKey(), lastDecided + 1);
+            logger.debug("State Machine decided {} for instance {}", decideOp.getKey(), lastDecided + 1);
             if (mine != null && mine.equals(decideOp)) {
-                logger.info("Trigger Execute {} for instance {}", decideOp.getKey(), lastDecided + 1);
+                logger.debug("Trigger Execute {} for instance {}", decideOp.getKey(), lastDecided + 1);
                 triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
             } else {
                 if (mine == null) {
@@ -339,7 +357,7 @@ public class StateMachine extends GenericProtocol {
 
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
-        logger.info("Connection to {} is up", event.getNode());
+        logger.debug("Connection to {} is up", event.getNode());
         connected.add(event.getNode());
         failedConn.remove(event.getNode());
         if (!membership.contains(event.getNode())) {
@@ -359,7 +377,7 @@ public class StateMachine extends GenericProtocol {
     //fazer timmer para checkar se os membros da membership estao ativos
     //podemos prpor add node e antess da decisão este ser desconectado e depois fica na membership e nunca é removido
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-        logger.info("Connection to {} is down, cause {}", event.getNode(), event.getCause());
+        logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
         if (membership.contains(event.getNode())) {
             ByteBuf buf = Unpooled.buffer(6);
             try {

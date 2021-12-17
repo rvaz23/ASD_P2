@@ -128,7 +128,7 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
-        logger.info("Received " + request);
+        logger.debug("Received " + request);
         if (joinedInstance <= request.getInstance() && joinedInstance >= 0) {
             int instanceID = request.getInstance();
             PaxosInstance instance = paxosInstancesMap.get(instanceID);
@@ -152,7 +152,7 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
-        logger.info("Prepare from {} " + msg.toString(), host.toString());
+        logger.debug("Prepare from {} " + msg.toString(), host.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
@@ -201,7 +201,7 @@ public class Agreement extends GenericProtocol {
 
     //Nao deverá ser nula a instacia pois ja fez prepare
     private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
-        logger.info("PrepareOk {} " + msg.toString());
+        logger.debug("PrepareOk {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance.getAll_processes().contains(host)) {
@@ -228,6 +228,7 @@ public class Agreement extends GenericProtocol {
 
     private void createTimeout(int instance) {
         //setupPeriodicTimer(timeOut, this.fixTime, this.fixTime);
+        cancelTimeout(instance);
         long timerId = setupTimer(new Timeout(), this.agreementTime);
         PaxosInstance paxos = paxosInstancesMap.get(instance);
         paxos.setTimerId(timerId);
@@ -236,12 +237,12 @@ public class Agreement extends GenericProtocol {
 
     private void cancelTimeout(int instance) {
         PaxosInstance paxos = paxosInstancesMap.get(instance);
-        System.out.println(cancelTimer(paxos.getTimerId()));
+        cancelTimer(paxos.getTimerId());
         timeoutInstancesMap.remove(paxos.getTimerId());
     }
 
     private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
-        logger.info("Accept {} " + msg.toString());
+        logger.debug("Accept {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
@@ -284,7 +285,7 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
-        logger.info("AcceptOk " + msg.toString());
+        logger.debug("AcceptOk " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
@@ -296,17 +297,17 @@ public class Agreement extends GenericProtocol {
                 Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
 
                 if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
-                    logger.info("Adiciona par porque são todos iguais");
+                    logger.debug("Adiciona par porque são todos iguais");
                     instance.add_accept_ok(pair);
                 } else if (verifyIfBigger(instance.getAccept_ok_set(), pair)) {
-                    logger.info("Vai adicionar novo set porque este é amior que todos até agora");
+                    logger.debug("Vai adicionar novo set porque este é amior que todos até agora");
                     List<Tuple> list = new LinkedList<Tuple>();
                     list.add(pair);
                     instance.setAccept_ok_set(list);
                 }
                 if (instance.getDecided() == null && instance.getAccept_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
                     instance.setDecided(pair.getVal());
-                    logger.info("Decide at {} " + pair.getVal(),msg.getInstance());
+                    logger.debug("Decide at {} " + pair.getVal(),msg.getInstance());
                     triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
                     if (instance.getProposer_seq() == pair.getSeq())
                         cancelTimeout(msg.getInstance());
@@ -378,18 +379,23 @@ public class Agreement extends GenericProtocol {
     }
 
     private void uponTimeout(Timeout timer, long timerID) {
-        int InstanceId = timeoutInstancesMap.get(timerID);
-        PaxosInstance instance = paxosInstancesMap.get(InstanceId);
-        if (instance.getDecided() == null) {
-            int nSeq = instance.getProposer_seq() + instance.getAll_processes().size();
-            instance.setProposer_seq(nSeq);
-            PrepareMessage prepareMessage = new PrepareMessage(InstanceId, nSeq);
-            for (Host h : instance.getAll_processes()) {
-                sendMessage(prepareMessage, h);
+        try{
+            int InstanceId = timeoutInstancesMap.get(timerID);
+            PaxosInstance instance = paxosInstancesMap.get(InstanceId);
+            if (instance.getDecided() == null) {
+                int nSeq = instance.getProposer_seq() + instance.getAll_processes().size();
+                instance.setProposer_seq(nSeq);
+                PrepareMessage prepareMessage = new PrepareMessage(InstanceId, nSeq);
+                for (Host h : instance.getAll_processes()) {
+                    sendMessage(prepareMessage, h);
+                }
+                instance.setPrepare_ok_set(new LinkedList<Tuple>());
+                createTimeout(InstanceId);
+                paxosInstancesMap.put(InstanceId, instance);
             }
-            instance.setPrepare_ok_set(new LinkedList<Tuple>());
-            createTimeout(InstanceId);
-            paxosInstancesMap.put(InstanceId, instance);
+        }catch (NullPointerException e ){
+            logger.info("Timeout == null , instancia {}");
         }
-    }
+        }
+
 }
