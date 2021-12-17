@@ -252,7 +252,7 @@ public class StateMachine extends GenericProtocol {
         //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
         decided.put(notification.getInstance(), op);
 
-        commulativeHash= HashApp.appendOpToHash(commulativeHash,op.getData());
+        //commulativeHash= HashApp.appendOpToHash(commulativeHash,op.getData());
 
 
         Operation proposed_op = deciding.remove(notification.getInstance());
@@ -262,6 +262,7 @@ public class StateMachine extends GenericProtocol {
         }
 
         if (proposed_op != null) {
+            waiting_decision--;
             if (proposed_op.equals(op)) {
                 if (op.getOpType() == Operation.NORMAL) {
                     mine_decided.put(notification.getInstance(), op);
@@ -272,7 +273,7 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
-        computeHash(notification.getInstance());
+        //computeHash(notification.getInstance());
     }
 
     private void computeHash(int instance){
@@ -313,7 +314,7 @@ public class StateMachine extends GenericProtocol {
         if (msg.getDecided().size() > decided.size()) {
             decided = msg.getDecided();
             for (Map.Entry<Integer, Operation> entry : decided.entrySet()){
-                logger.info("Decided at {} , {} ",entry.getKey(),entry.getValue().getKey());
+                logger.debug("Decided at {} , {} ",entry.getKey(),entry.getValue().getKey());
             }
 
         }
@@ -325,6 +326,7 @@ public class StateMachine extends GenericProtocol {
             Operation decideOp = decided.get(lastDecided + 1);
             Operation mine = mine_decided.get(lastDecided + 1);
             logger.debug("State Machine decided {} for instance {}", decideOp.getKey(), lastDecided + 1);
+            /*
             if (mine != null && mine.equals(decideOp)) {
                 logger.debug("Trigger Execute {} for instance {}", decideOp.getKey(), lastDecided + 1);
                 triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
@@ -334,9 +336,10 @@ public class StateMachine extends GenericProtocol {
                 } else {
                     logger.debug("Algo correu mal / mine=" + mine);
                 }
-            }
+            }*/
+            triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
             lastDecided++;
-            waiting_decision--;
+
         }
     }
 
@@ -377,7 +380,7 @@ public class StateMachine extends GenericProtocol {
     //fazer timmer para checkar se os membros da membership estao ativos
     //podemos prpor add node e antess da decisão este ser desconectado e depois fica na membership e nunca é removido
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-        logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
+        logger.info("Connection to {} is down, cause {}", event.getNode(), event.getCause());
         if (membership.contains(event.getNode())) {
             ByteBuf buf = Unpooled.buffer(6);
             try {
@@ -396,16 +399,16 @@ public class StateMachine extends GenericProtocol {
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
         // start thread to send periodic announcements
-
+    /*
         Integer tries =failedConn.get(event.getNode());
         if(tries==null){
             tries=1;
         }
         failedConn.put(event.getNode(),tries);
-                   /*
+             */
         if (membership.contains(event.getNode()))
             openConnection(event.getNode());
-    */
+
     }
 
     private void uponInConnectionUp(InConnectionUp event, int channelId) {
@@ -425,7 +428,7 @@ public class StateMachine extends GenericProtocol {
     }
 
     private void uponInConnectionDown(InConnectionDown event, int channelId) {
-        logger.trace("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
+        logger.info("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
     }
 
     private void uponRPC(TimerRPC timer, long timerID) {
