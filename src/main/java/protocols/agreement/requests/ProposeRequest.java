@@ -13,12 +13,14 @@ public class ProposeRequest extends ProtoRequest {
     private final int instance;
     private final String opId;
     private final Operation operation;
+    private int handicap;
 
-    public ProposeRequest(int instance, String opId, Operation operation) {
+    public ProposeRequest(int instance, String opId, Operation operation,int handicap) {
         super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
         this.operation = operation;
+        this.handicap= handicap;
     }
 
     public int getInstance() {
@@ -31,6 +33,14 @@ public class ProposeRequest extends ProtoRequest {
 
     public String getOpId() {
         return opId;
+    }
+
+    public int getHandicap() {
+        return handicap;
+    }
+
+    public void setHandicap(int handicap) {
+        this.handicap = handicap;
     }
 
     @Override

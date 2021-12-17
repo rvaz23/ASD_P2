@@ -82,6 +82,8 @@ public class StateMachine extends GenericProtocol {
     private int waiting_decision;
     private Map<Host,Integer> failedConn;
 
+    private int handicap=0;
+
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
@@ -266,9 +268,12 @@ public class StateMachine extends GenericProtocol {
             if (proposed_op.equals(op)) {
                 if (op.getOpType() == Operation.NORMAL) {
                     mine_decided.put(notification.getInstance(), op);
+                    handicap=0;
                 }
             } else {
+                //System.out.println(proposed_op.getKey());
                 pending.add(0, proposed_op);
+                handicap++;
             }
         }
         triggerExecute();
@@ -347,7 +352,7 @@ public class StateMachine extends GenericProtocol {
         while (waiting_decision < ONGOING && !pending.isEmpty()) {
             Operation pending_operation = pending.remove(0);
             deciding.put(nextInstance, pending_operation);
-            sendRequest(new ProposeRequest(nextInstance++, pending_operation.getKey().toString(), pending_operation), Agreement.PROTOCOL_ID);
+            sendRequest(new ProposeRequest(nextInstance++, pending_operation.getKey().toString(), pending_operation,handicap), Agreement.PROTOCOL_ID);
             waiting_decision++;
         }
     }

@@ -135,7 +135,7 @@ public class Agreement extends GenericProtocol {
             if (instance == null) {
                 //create instance in map
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-                instance = new PaxosInstance(request.getOperation(), selfID, membership);
+                instance = new PaxosInstance(request.getOperation(), selfID+(membership.size()*request.getHandicap()), membership);
                 paxosInstancesMap.put(instanceID, instance);
             } else {
                 instance.setProposer_value(request.getOperation());
