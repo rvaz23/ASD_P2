@@ -6,6 +6,9 @@ import org.apache.commons.codec.binary.Hex;
 import protocols.agreement.messages.AcceptMessage;
 import protocols.agreement.messages.NotifyMessage;
 import protocols.app.HashApp;
+import protocols.app.requests.CurrentStateReply;
+import protocols.app.requests.CurrentStateRequest;
+import protocols.app.requests.InstallStateRequest;
 import protocols.statemachine.messages.RPCMessage;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
@@ -71,8 +74,10 @@ public class StateMachine extends GenericProtocol {
     private Map<Integer, Operation> decided;
     private Map<Integer, Operation> mine_decided;
 
+    private Map<Integer, Host> joiningNodes;
+
     Thread connThread;
-    byte[] commulativeHash;
+    byte[] statebytes;
 
 
     private List<Operation> pending;
@@ -91,7 +96,6 @@ public class StateMachine extends GenericProtocol {
         waiting_decision = 0;
 
         setConnThread();
-        commulativeHash=new byte[0];
 
         failedConn = new HashMap<>();
         decided = new HashMap<Integer, Operation>();
@@ -99,6 +103,7 @@ public class StateMachine extends GenericProtocol {
         deciding = new HashMap<Integer, Operation>();
         mine_decided = new HashMap<Integer, Operation>();
         connected = new LinkedList<>();
+        joiningNodes = new HashMap<>();
 
         String address = props.getProperty("address");
         String port = props.getProperty("p2p_port");
@@ -122,6 +127,8 @@ public class StateMachine extends GenericProtocol {
         registerChannelEventHandler(channelId, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
         registerMessageHandler(channelId, NotifyMessage.MSG_ID, this::uponNotifyMessage);
+        /*--------------------- Register Reply Handlers ----------------------------- */
+        registerReplyHandler(CurrentStateReply.REQUEST_ID,this::uponCurrentStateReply);
 
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
@@ -207,7 +214,15 @@ public class StateMachine extends GenericProtocol {
         connThread.start();
     }
 
-    private void installState() throws IOException {
+    private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto){
+            statebytes= reply.getState();
+            Host h =joiningNodes.get(reply.getInstance());
+            sendMessage(new NotifyMessage(reply.getInstance(), membership, decided,statebytes), h);
+            logger.debug("Added {} to membership ", h);
+    }
+
+    /*
+    private void uponinstallState() throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
         dos.writeInt(lastDecided);
@@ -223,7 +238,7 @@ public class StateMachine extends GenericProtocol {
             dos.writeInt(op.getData().length);
             dos.write(op.getData());
         }
-    }
+    }*/
 
     /*--------------------------------- Requests ---------------------------------------- */
     private void uponOrderRequest(OrderRequest request, short sourceProto) {
@@ -297,8 +312,10 @@ public class StateMachine extends GenericProtocol {
                 AddReplicaRequest request = new AddReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
                 openConnection(process);
-                sendMessage(new NotifyMessage(instance, membership, decided), process);
-                logger.debug("Added {} to membership ", process);
+                joiningNodes.put(instance,process);
+                sendRequest(new CurrentStateRequest(instance),HashApp.PROTO_ID);
+                //sendMessage(new NotifyMessage(instance, membership, decided), process);
+                //logger.debug("Added {} to membership ", process);
             } else if (operation.getOpType() == Operation.REMOVE) {
                 RemoveReplicaRequest request = new RemoveReplicaRequest(instance, process);
                 sendRequest(request, Agreement.PROTOCOL_ID);
@@ -315,6 +332,8 @@ public class StateMachine extends GenericProtocol {
         int instance = msg.getInstance();
         if (msg.getDecided().size() > decided.size()) {
             decided = msg.getDecided();
+            statebytes=msg.getState();
+            sendRequest(new InstallStateRequest(statebytes),HashApp.PROTO_ID);
             for (Map.Entry<Integer, Operation> entry : decided.entrySet()){
                 logger.debug("Decided at {} , {} ",entry.getKey(),entry.getValue().getKey());
             }

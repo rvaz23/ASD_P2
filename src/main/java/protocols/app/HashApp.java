@@ -39,6 +39,7 @@ public class HashApp extends GenericProtocol {
     private final Map<String, byte[]> data;
     private byte[] cumulativeHash;
 
+
     //Client callbacks
     private final Map<UUID, Pair<Host, Long>> clientIdMapper;
 

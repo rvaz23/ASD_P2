@@ -19,12 +19,14 @@ public class NotifyMessage extends ProtoMessage {
     private int instance;
     private List<Host> membership;
     private Map<Integer, Operation> decided;
+    private byte[] state;
 
-    public NotifyMessage(int instance, List<Host> membership, Map<Integer, Operation> decided) {
+    public NotifyMessage(int instance, List<Host> membership, Map<Integer, Operation> decided,byte[] state) {
         super(MSG_ID);
         this.instance = instance;
         this.membership = membership;
         this.decided=decided;
+        this.state=state;
     }
 
     @Override
@@ -49,6 +51,14 @@ public class NotifyMessage extends ProtoMessage {
         this.decided = decided;
     }
 
+    public byte[] getState() {
+        return state;
+    }
+
+    public void setState(byte[] state) {
+        this.state = state;
+    }
+
     @Override
     public String toString() {
         return "PrepareMessage{" +
@@ -70,6 +80,8 @@ public class NotifyMessage extends ProtoMessage {
                 out.writeInt(entry.getKey());
                 Operation.serializer.serialize(entry.getValue(),out);
             }
+            out.writeInt(msg.getState().length);
+            out.writeBytes(msg.getState());
         }
 
         @Override
@@ -88,7 +100,9 @@ public class NotifyMessage extends ProtoMessage {
                 Operation op = Operation.serializer.deserialize(in);
                 decided.put(decision_instance,op);
             }
-            return new NotifyMessage(instance, membership,decided);
+            byte[] state = new byte[in.readInt()];
+            in.readBytes(state);
+            return new NotifyMessage(instance, membership,decided,state);
         }
     };
 
