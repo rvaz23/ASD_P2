@@ -326,17 +326,18 @@ public class Agreement extends GenericProtocol {
         logger.debug("Received " + request);
         //The AddReplicaRequest contains an "instance" field, which we ignore in this incorrect protocol.
         //You should probably take it into account while doing whatever you do here.
-
-        membership.add(request.getReplica());
-        Set<Integer> keys = paxosInstancesMap.keySet();
-        for (Integer key : keys) {
-            if (key > request.getInstance()) {
-                PaxosInstance paxos = paxosInstancesMap.get(key);
-                if (paxos != null) {
-                    List<Host> processes = paxos.getAll_processes();
-                    processes.add(request.getReplica());
-                    paxos.setAll_processes(processes);
-                    paxosInstancesMap.put(key, paxos);
+        if(!membership.contains(request.getReplica())) {
+            membership.add(request.getReplica());
+            Set<Integer> keys = paxosInstancesMap.keySet();
+            for (Integer key : keys) {
+                if (key > request.getInstance()) {
+                    PaxosInstance paxos = paxosInstancesMap.get(key);
+                    if (paxos != null) {
+                        List<Host> processes = paxos.getAll_processes();
+                        processes.add(request.getReplica());
+                        paxos.setAll_processes(processes);
+                        paxosInstancesMap.put(key, paxos);
+                    }
                 }
             }
         }

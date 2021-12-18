@@ -217,6 +217,7 @@ public class StateMachine extends GenericProtocol {
     private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto){
             statebytes= reply.getState();
             Host h =joiningNodes.get(reply.getInstance());
+
             sendMessage(new NotifyMessage(reply.getInstance(), membership, decided,statebytes), h);
             logger.debug("Added {} to membership ", h);
     }
@@ -271,10 +272,6 @@ public class StateMachine extends GenericProtocol {
 
         Operation proposed_op = deciding.remove(notification.getInstance());
 
-        if (op.getOpType() != Operation.NORMAL) {
-            processReplicaManagement(notification.getInstance(), op);
-        }
-
         if (proposed_op != null) {
             waiting_decision--;
             if (proposed_op.equals(op)) {
@@ -290,7 +287,7 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
-       // computeHash(notification.getInstance());
+        computeHash(notification.getInstance());
     }
 
     private void computeHash(int instance){
@@ -330,14 +327,15 @@ public class StateMachine extends GenericProtocol {
 
     private void uponNotifyMessage(NotifyMessage msg, Host host, short sourceProto, int channelId) {
         int instance = msg.getInstance();
+        nextInstance=instance+1;
+        lastDecided=instance;
         if (msg.getDecided().size() > decided.size()) {
             decided = msg.getDecided();
             statebytes=msg.getState();
+            membership=msg.getMembership();
             sendRequest(new InstallStateRequest(statebytes),HashApp.PROTO_ID);
-            for (Map.Entry<Integer, Operation> entry : decided.entrySet()){
-                logger.debug("Decided at {} , {} ",entry.getKey(),entry.getValue().getKey());
-            }
-
+            logger.info("Current instace {}, lastDecided  {}, MAP_SIZE {}",
+                    instance,lastDecided, decided.size());
         }
         triggerNotification(new JoinedNotification(msg.getMembership(), instance));
     }
@@ -358,7 +356,11 @@ public class StateMachine extends GenericProtocol {
                     logger.debug("Algo correu mal / mine=" + mine);
                 }
             }*/
-            triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
+            if (decideOp.getOpType() != Operation.NORMAL) {
+                processReplicaManagement(lastDecided+1, decideOp);
+            }else{
+                triggerNotification(new ExecuteNotification(UUID.fromString(decideOp.getKey()), decideOp.getData()));
+            }
             lastDecided++;
 
         }
