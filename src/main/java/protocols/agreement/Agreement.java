@@ -41,6 +41,7 @@ public class Agreement extends GenericProtocol {
     private HashMap<Long, Integer> timeoutInstancesMap;
 
     private final int agreementTime;
+    int decider;
 
     public Agreement(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -48,6 +49,8 @@ public class Agreement extends GenericProtocol {
         membership = null;
         paxosInstancesMap = new HashMap<>();
         timeoutInstancesMap = new HashMap<>();
+
+        decider=0;
 
         this.agreementTime = Integer.parseInt(props.getProperty("agreement_time", "10000"));
 
@@ -132,12 +135,13 @@ public class Agreement extends GenericProtocol {
         if (joinedInstance <= request.getInstance() && joinedInstance >= 0) {
             int instanceID = request.getInstance();
             PaxosInstance instance = paxosInstancesMap.get(instanceID);
+            int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
             if (instance == null) {
                 //create instance in map
-                int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
                 instance = new PaxosInstance(request.getOperation(), selfID+(membership.size()*request.getHandicap()), membership);
                 paxosInstancesMap.put(instanceID, instance);
             } else {
+                instance.setProposer_seq(selfID+(membership.size()*request.getHandicap()));
                 instance.setProposer_value(request.getOperation());
                 instance.setPrepare_ok_set(new LinkedList<Tuple>());
             }
@@ -309,8 +313,10 @@ public class Agreement extends GenericProtocol {
                     instance.setDecided(pair.getVal());
                     logger.debug("Decide at {} " + pair.getVal(),msg.getInstance());
                     triggerNotification(new DecidedNotification(msg.getInstance(), pair.getVal()));
+                    decider++;
                     if (instance.getProposer_seq() == pair.getSeq())
                         cancelTimeout(msg.getInstance());
+
                 }
             }
         }

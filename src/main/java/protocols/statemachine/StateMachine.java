@@ -59,8 +59,8 @@ public class StateMachine extends GenericProtocol {
     //Protocol information, to register in babel
     public static final String PROTOCOL_NAME = "StateMachine";
     public static final short PROTOCOL_ID = 200;
-    public static final int RETRY_PERIOD = 2000;
-    public static final int MAX_TRIES = 5;
+    public static final int RETRY_PERIOD = 5000;
+    public static final int MAX_TRIES = 10;
 
     private final Host self;     //My own address/port
     private final int channelId; //Id of the created channel
@@ -194,7 +194,7 @@ public class StateMachine extends GenericProtocol {
                     Thread.sleep(RETRY_PERIOD);
                     for (Map.Entry<Host, Integer> entry : failedConn.entrySet())
                         if (entry.getValue()>MAX_TRIES){
-                            logger.debug("MAX tries reached abort connection to {}", entry.getKey());
+                            logger.info("MAX tries reached abort connection to {}", entry.getKey());
                             failedConn.remove(entry.getKey(),entry.getValue());
                         }else {
                             openConnection(entry.getKey());
@@ -254,9 +254,6 @@ public class StateMachine extends GenericProtocol {
         //decided.put(notification.getInstance(),new Operation(notification.getOperation(), notification.getOpId()));
         decided.put(notification.getInstance(), op);
 
-        //commulativeHash= HashApp.appendOpToHash(commulativeHash,op.getData());
-
-
         Operation proposed_op = deciding.remove(notification.getInstance());
 
         if (op.getOpType() != Operation.NORMAL) {
@@ -278,13 +275,13 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
-        //computeHash(notification.getInstance());
+       // computeHash(notification.getInstance());
     }
 
     private void computeHash(int instance){
-        if (lastDecided%100==0){
-                logger.info("Current state N_OPS= {}, MAP_SIZE={}, HASH={}",
-                        lastDecided, decided.size(),  Hex.encodeHexString(commulativeHash));
+        if (instance%100==0){
+                logger.info("Current instace {}, lastDecided  {}, MAP_SIZE {}",
+                        instance,lastDecided, decided.size());
         }
 
 
@@ -346,6 +343,11 @@ public class StateMachine extends GenericProtocol {
             lastDecided++;
 
         }
+        /*
+        if(lastDecided<nextInstance-2){
+            System.out.println(lastDecided+1);
+            sendRequest(new ProposeRequest(lastDecided+1, null, null,handicap), Agreement.PROTOCOL_ID);
+        }*/
     }
 
     private void proposePending() {
@@ -404,13 +406,13 @@ public class StateMachine extends GenericProtocol {
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
         // start thread to send periodic announcements
-    /*
+/*
         Integer tries =failedConn.get(event.getNode());
         if(tries==null){
             tries=1;
         }
-        failedConn.put(event.getNode(),tries);
-             */
+        failedConn.put(event.getNode(),tries+1);
+      */
         if (membership.contains(event.getNode()))
             openConnection(event.getNode());
 
