@@ -1,6 +1,7 @@
-package protocols.agreement;
+package protocols.agreement.multipaxos;
 
-import protocols.agreement.messages.*;
+import protocols.agreement.PaxosInstance;
+import protocols.agreement.multipaxos.messages.*;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.*;
 import protocols.agreement.timers.Timeout;
@@ -17,20 +18,13 @@ import protocols.agreement.notifications.DecidedNotification;
 import java.io.IOException;
 import java.util.*;
 
-/**
- * This is NOT a correct agreement protocol (it is actually a VERY wrong one)
- * This is simply an example of things you can do, and can be used as a starting point.
- * <p>
- * You are free to change/delete ANYTHING in this class, including its fields.
- * Do not assume that any logic implemented here is correct, think for yourself!
- */
-public class Agreement extends GenericProtocol {
+public class MultiPaxosAgreement extends GenericProtocol {
 
-    private static final Logger logger = LogManager.getLogger(Agreement.class);
+    private static final Logger logger = LogManager.getLogger(MultiPaxosAgreement.class);
 
     //Protocol information, to register in babel
-    public final static short PROTOCOL_ID = 100;
-    public final static String PROTOCOL_NAME = "EmptyAgreement";
+    public final static short PROTOCOL_ID = 200;
+    public final static String PROTOCOL_NAME = "MultiPaxosAgreement";
 
     private Host myself;
     private int joinedInstance;
@@ -43,7 +37,7 @@ public class Agreement extends GenericProtocol {
     private final int agreementTime;
     int decider;
 
-    public Agreement(Properties props) throws IOException, HandlerRegistrationException {
+    public MultiPaxosAgreement(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         joinedInstance = -1; //-1 means we have not yet joined the system
         membership = null;
@@ -80,28 +74,28 @@ public class Agreement extends GenericProtocol {
         // Allows this protocol to receive events from this channel.
         registerSharedChannel(cId);
         /*---------------------- Register Message Serializers ---------------------- */
-        registerMessageSerializer(cId, BroadcastMessage.MSG_ID, BroadcastMessage.serializer);
-        registerMessageSerializer(cId, AcceptMessage.MSG_ID, AcceptMessage.serializer);
-        registerMessageSerializer(cId, AcceptOkMessage.MSG_ID, AcceptOkMessage.serializer);
-        registerMessageSerializer(cId, NotifyMessage.MSG_ID, NotifyMessage.serializer);
-        registerMessageSerializer(cId, PrepareMessage.MSG_ID, PrepareMessage.serializer);
-        registerMessageSerializer(cId, PrepareOkMessage.MSG_ID, PrepareOkMessage.serializer);
+        registerMessageSerializer(cId, MPBroadcastMessage.MSG_ID, MPBroadcastMessage.serializer);
+        registerMessageSerializer(cId, MPAcceptMessage.MSG_ID, MPAcceptMessage.serializer);
+        registerMessageSerializer(cId, MPAcceptOkMessage.MSG_ID, MPAcceptOkMessage.serializer);
+        registerMessageSerializer(cId, MPNotifyMessage.MSG_ID, MPNotifyMessage.serializer);
+        registerMessageSerializer(cId, MPPrepareMessage.MSG_ID, MPPrepareMessage.serializer);
+        registerMessageSerializer(cId, MPPrepareOkMessage.MSG_ID, MPPrepareOkMessage.serializer);
         /*---------------------- Register Message Handlers -------------------------- */
         try {
             //registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
-            registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage);
-            registerMessageHandler(cId, PrepareOkMessage.MSG_ID, this::uponPrepareOkMessage);
-            registerMessageHandler(cId, AcceptMessage.MSG_ID, this::uponAcceptMessage);
-            registerMessageHandler(cId, AcceptOkMessage.MSG_ID, this::uponAcceptOkMessage);
+            registerMessageHandler(cId, MPPrepareMessage.MSG_ID, this::uponPrepareMessage);
+            registerMessageHandler(cId, MPPrepareOkMessage.MSG_ID, this::uponPrepareOkMessage);
+            registerMessageHandler(cId, MPAcceptMessage.MSG_ID, this::uponAcceptMessage);
+            registerMessageHandler(cId, MPAcceptOkMessage.MSG_ID, this::uponAcceptOkMessage);
         } catch (HandlerRegistrationException e) {
             throw new AssertionError("Error registering message handler.", e);
         }
     }
 
-    private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
+    private void uponBroadcastMessage(MPBroadcastMessage msg, Host host, short sourceProto, int channelId) {
         if (joinedInstance >= 0) {
             //Obviously your agreement protocols will not decide things as soon as you receive the first message
-            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOp()));
+            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOp().getLastOperation()));
         } else {
             //We have not yet received a JoinedNotification, but we are already receiving messages from the other
             //agreement instances, maybe we should do something with them...?
@@ -147,15 +141,15 @@ public class Agreement extends GenericProtocol {
             }
 
             //broadcast prepare for all replicas
-            PrepareMessage prepareMessage = new PrepareMessage(instanceID, instance.getProposer_seq());
+            MPPrepareMessage MPPrepareMessage = new MPPrepareMessage(instanceID, instance.getProposer_seq());
             for (Host host : instance.getAll_processes()) {
-                sendMessage(prepareMessage, host);
+                sendMessage(MPPrepareMessage, host);
             }
             createTimeout(instanceID);
         }
     }
 
-    private void uponPrepareMessage(PrepareMessage msg, Host host, short sourceProto, int channelId) {
+    private void uponPrepareMessage(MPPrepareMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("Prepare from {} " + msg.toString(), host.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
@@ -166,7 +160,7 @@ public class Agreement extends GenericProtocol {
                     instance = new PaxosInstance(null, selfID, membership);
                     instance.setHighest_prepare(msg.getProposer_seq());
                     paxosInstancesMap.put(msg.getInstance(), instance);
-                    PrepareOkMessage message = new PrepareOkMessage(
+                    MPPrepareOkMessage message = new MPPrepareOkMessage(
                             msg.getInstance(),
                             msg.getProposer_seq(),
                             -1,
@@ -177,11 +171,11 @@ public class Agreement extends GenericProtocol {
                 if (instance.getAll_processes().contains(host)) {
                     if (msg.getProposer_seq() > instance.getHighest_prepare()) {
                         instance.setHighest_prepare(msg.getProposer_seq());
-                        PrepareOkMessage message = new PrepareOkMessage(
+                        MPPrepareOkMessage message = new MPPrepareOkMessage(
                                 msg.getInstance(),
                                 msg.getProposer_seq(),
                                 instance.getHighest_accepted(),
-                                instance.getHighest_value());
+                                new OperationLog(instance.getHighest_value()));
                         sendMessage(message, host);
                     }
                 }
@@ -204,21 +198,21 @@ public class Agreement extends GenericProtocol {
     }
 
     //Nao deverá ser nula a instacia pois ja fez prepare
-    private void uponPrepareOkMessage(PrepareOkMessage msg, Host host, short sourceProto, int channelId) {
+    private void uponPrepareOkMessage(MPPrepareOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("PrepareOk {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance.getAll_processes().contains(host)) {
                 if (msg.getProposer_seq() == instance.getProposer_seq()) {
-                    instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val());
+                    instance.add_prepare_ok(msg.getHighest_seq(), msg.getHighest_val().getLastOperation());
                     if (instance.getPrepare_ok_set().size() >= (instance.getAll_processes().size() / 2) + 1) {
                         Tuple highest = highest(instance.getPrepare_ok_set());
                         if (highest.getVal() != null) {
                             instance.setProposer_value(highest.getVal());
                         }
-                        AcceptMessage acceptMessage = new AcceptMessage(msg.getInstance(),
+                        MPAcceptMessage acceptMessage = new MPAcceptMessage(msg.getInstance(),
                                 instance.getProposer_seq(),
-                                instance.getProposer_value());
+                                new OperationLog(instance.getProposer_value()));
                         for (Host h : instance.getAll_processes()) {
                             sendMessage(acceptMessage, h);
                         }
@@ -245,20 +239,20 @@ public class Agreement extends GenericProtocol {
         timeoutInstancesMap.remove(paxos.getTimerId());
     }
 
-    private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
+    private void uponAcceptMessage(MPAcceptMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("Accept {} " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-                instance = new PaxosInstance(msg.getValue(), selfID, membership);
+                instance = new PaxosInstance(msg.getValue().getLastOperation(), selfID, membership);
             }
             if (instance.getAll_processes().contains(host)) {
                 if (msg.getProposer_seq() >= instance.getHighest_prepare()) {
                     instance.setHighest_prepare(msg.getProposer_seq());
                     instance.setHighest_accepted(msg.getProposer_seq());
-                    instance.setHighest_value(msg.getValue());
-                    AcceptOkMessage message = new AcceptOkMessage(
+                    instance.setHighest_value(msg.getValue().getLastOperation());
+                    MPAcceptOkMessage message = new MPAcceptOkMessage(
                             msg.getInstance(),
                             msg.getProposer_seq(),
                             msg.getValue());
@@ -288,17 +282,17 @@ public class Agreement extends GenericProtocol {
         return false;
     }
 
-    private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
+    private void uponAcceptOkMessage(MPAcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("AcceptOk " + msg.toString());
         PaxosInstance instance = paxosInstancesMap.get(msg.getInstance());
         if (joinedInstance <= msg.getInstance() && joinedInstance >= 0) {
             if (instance == null) {
                 int selfID = buildSeqNum(membership.toArray(new Host[membership.size()]));
-                instance = new PaxosInstance(msg.getValue(), selfID, membership);
+                instance = new PaxosInstance(msg.getValue().getLastOperation(), selfID, membership);
             }
 
             if (instance.getAll_processes().contains(host)) {
-                Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
+                Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue().getLastOperation());
 
                 if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
                     instance.add_accept_ok(pair);
@@ -390,9 +384,9 @@ public class Agreement extends GenericProtocol {
             if (instance.getDecided() == null) {
                 int nSeq = instance.getProposer_seq() + instance.getAll_processes().size();
                 instance.setProposer_seq(nSeq);
-                PrepareMessage prepareMessage = new PrepareMessage(InstanceId, nSeq);
+                MPPrepareMessage MPPrepareMessage = new MPPrepareMessage(InstanceId, nSeq);
                 for (Host h : instance.getAll_processes()) {
-                    sendMessage(prepareMessage, h);
+                    sendMessage(MPPrepareMessage, h);
                 }
                 instance.setPrepare_ok_set(new LinkedList<Tuple>());
                 createTimeout(InstanceId);
@@ -401,6 +395,6 @@ public class Agreement extends GenericProtocol {
         }catch (NullPointerException e ){
             logger.info("Timeout == null , instancia {}");
         }
-        }
+    }
 
 }
