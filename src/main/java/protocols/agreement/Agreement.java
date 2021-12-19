@@ -301,10 +301,8 @@ public class Agreement extends GenericProtocol {
                 Tuple pair = new Tuple(msg.getProposer_seq(), msg.getValue());
 
                 if (verifyIfAllEq(instance.getAccept_ok_set(), pair)) {
-                    logger.debug("Adiciona par porque são todos iguais");
                     instance.add_accept_ok(pair);
                 } else if (verifyIfBigger(instance.getAccept_ok_set(), pair)) {
-                    logger.debug("Vai adicionar novo set porque este é amior que todos até agora");
                     List<Tuple> list = new LinkedList<Tuple>();
                     list.add(pair);
                     instance.setAccept_ok_set(list);

@@ -287,7 +287,7 @@ public class StateMachine extends GenericProtocol {
         }
         triggerExecute();
         proposePending();
-        computeHash(notification.getInstance());
+        //computeHash(notification.getInstance());
     }
 
     private void computeHash(int instance){
@@ -333,10 +333,14 @@ public class StateMachine extends GenericProtocol {
             decided = msg.getDecided();
             statebytes=msg.getState();
             membership=msg.getMembership();
+            for (Host h:membership){
+                openConnection(h);
+            }
             sendRequest(new InstallStateRequest(statebytes),HashApp.PROTO_ID);
-            logger.info("Current instace {}, lastDecided  {}, MAP_SIZE {}",
+            logger.debug("Current instace {}, lastDecided  {}, MAP_SIZE {}",
                     instance,lastDecided, decided.size());
         }
+        state=State.ACTIVE;
         triggerNotification(new JoinedNotification(msg.getMembership(), instance));
     }
 
