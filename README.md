@@ -1,4 +1,4 @@
-# ASD2122_2
+# ASD2122_2 Paxos Implementation
 
 Falta Mensagens de stateMachine 
 -Notify replica that is joined
